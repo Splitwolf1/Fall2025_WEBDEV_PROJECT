@@ -14,6 +14,14 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 The backend uses Docker Compose to run all microservices and infrastructure.
 
+### ⚠️ IMPORTANT: Start Docker Desktop First!
+
+**Before starting backend services, make sure Docker Desktop is running!**
+
+1. **Open Docker Desktop** application on your computer
+2. Wait for Docker Desktop to fully start (you'll see "Docker Desktop is running" in the system tray)
+3. Then proceed with the commands below
+
 ### Start Backend Services
 
 **Location:** Run commands from the `backend` directory
@@ -78,6 +86,14 @@ The page auto-updates as you edit files.
 
 ## 🔄 Running the Full Stack
 
+### ⚠️ IMPORTANT: Start Docker Desktop First!
+
+**Before starting backend services, make sure Docker Desktop is running!**
+
+1. **Open Docker Desktop** application on your computer
+2. Wait for Docker Desktop to fully start (you'll see "Docker Desktop is running" in the system tray)
+3. Then proceed with Step 1 below
+
 ### Step 1: Start Backend (Terminal 1)
 ```bash
 cd backend
@@ -123,6 +139,6 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The easiest way to deploy THE Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
