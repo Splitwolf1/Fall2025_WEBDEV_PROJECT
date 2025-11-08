@@ -59,6 +59,16 @@ services:
     networks:
       - farm2table-network
 
+  mongo-deliveries:
+    image: mongo:7
+    container_name: farm2table-mongo-deliveries
+    ports:
+      - "27020:27017"
+    volumes:
+      - mongo_deliveries_data:/data/db
+    networks:
+      - farm2table-network
+
   # API Gateway
   api-gateway:
     build: ./api-gateway
@@ -77,6 +87,8 @@ services:
       - user-service
       - product-service
       - order-service
+      - delivery-service
+      - notification-service
     networks:
       - farm2table-network
     volumes:
@@ -148,11 +160,53 @@ services:
       - ./services/order-service:/app
       - /app/node_modules
 
+  delivery-service:
+    build: ./services/delivery-service
+    container_name: farm2table-delivery-service
+    ports:
+      - "3004:3004"
+    environment:
+      - SERVICE_NAME=delivery-service
+      - PORT=3004
+      - MONGO_URI=mongodb://mongo-deliveries:27017/deliveries
+      - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
+      - CONSUL_HOST=consul
+    depends_on:
+      - mongo-deliveries
+      - rabbitmq
+      - consul
+    networks:
+      - farm2table-network
+    volumes:
+      - ./services/delivery-service:/app
+      - /app/node_modules
+
+  notification-service:
+    build: ./services/notification-service
+    container_name: farm2table-notification-service
+    ports:
+      - "3006:3006"
+    environment:
+      - SERVICE_NAME=notification-service
+      - PORT=3006
+      - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - SOCKETIO_PORT=3006
+    depends_on:
+      - rabbitmq
+      - consul
+    networks:
+      - farm2table-network
+    volumes:
+      - ./services/notification-service:/app
+      - /app/node_modules
+
 volumes:
   rabbitmq_data:
   mongo_users_data:
   mongo_products_data:
   mongo_orders_data:
+  mongo_deliveries_data:
 
 networks:
   farm2table-network:

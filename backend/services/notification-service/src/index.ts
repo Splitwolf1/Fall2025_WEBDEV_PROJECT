@@ -128,6 +128,26 @@ app.post('/api/notify', (req, res) => {
   });
 });
 
+// REST API endpoint to send notifications to all users with a specific role
+app.post('/notify/role/:role', (req, res) => {
+  const { role } = req.params;
+  const { type, title, message, data } = req.body;
+
+  if (!type || !title || !message) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required fields: type, title, message',
+    });
+  }
+
+  sendRoleNotification(role, { type, title, message, data });
+
+  res.json({
+    success: true,
+    message: `Notification sent to all ${role}s`,
+  });
+});
+
 // Start server
 const startServer = async () => {
   try {

@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Product, { ProductCategory } from '../models/Product';
 
 const router = express.Router();
@@ -104,7 +105,39 @@ router.get('/:id', async (req: Request, res: Response) => {
 // Create product (farmer only)
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const product = new Product(req.body);
+    // Convert farmerId to ObjectId if it's a string
+    const productData = { ...req.body };
+    if (productData.farmerId && typeof productData.farmerId === 'string') {
+      if (mongoose.Types.ObjectId.isValid(productData.farmerId)) {
+        productData.farmerId = new mongoose.Types.ObjectId(productData.farmerId);
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid farmerId format',
+        });
+      }
+    }
+
+    // Ensure required fields are present
+    if (!productData.name || !productData.category || productData.price === undefined || productData.stockQuantity === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: name, category, price, and stockQuantity are required',
+      });
+    }
+
+    // Set default values
+    if (!productData.description) {
+      productData.description = '';
+    }
+    if (!productData.images) {
+      productData.images = [];
+    }
+    if (!productData.certifications) {
+      productData.certifications = [];
+    }
+
+    const product = new Product(productData);
     await product.save();
 
     res.status(201).json({
@@ -116,6 +149,17 @@ router.post('/', async (req: Request, res: Response) => {
     // TODO: Publish product.created event to RabbitMQ
   } catch (error: any) {
     console.error('Create product error:', error);
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map((err: any) => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors,
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Server error',

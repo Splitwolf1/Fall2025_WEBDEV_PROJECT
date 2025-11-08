@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import deliveryRoutes from './routes/deliveries';
+import fleetRoutes from './routes/fleet';
 
 dotenv.config();
 
@@ -16,6 +17,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/deliveries', deliveryRoutes);
+app.use('/api/fleet', fleetRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -34,6 +36,7 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       deliveries: '/api/deliveries',
+      fleet: '/api/fleet',
     },
   });
 });

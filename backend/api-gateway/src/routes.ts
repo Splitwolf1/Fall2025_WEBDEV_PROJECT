@@ -69,6 +69,36 @@ router.use(
     pathRewrite: {
       '^/api/products': '/api/products',
     },
+    timeout: 30000,
+    proxyTimeout: 30000,
+    onProxyReq: (proxyReq, req, res) => {
+      console.log(`[Proxy] ${req.method} ${req.path} -> ${PRODUCT_SERVICE}${req.path}`);
+      
+      // If body was parsed by express.json(), re-stringify it for forwarding
+      if (req.body && Object.keys(req.body).length > 0) {
+        const bodyString = JSON.stringify(req.body);
+        proxyReq.setHeader('Content-Type', 'application/json');
+        proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyString));
+        proxyReq.write(bodyString);
+      }
+    },
+    onProxyRes: (proxyRes, req, res) => {
+      console.log(`[Proxy] Response: ${proxyRes.statusCode} for ${req.method} ${req.path}`);
+    },
+    onError: (err, req, res) => {
+      console.error('[Proxy] Product proxy error:', {
+        message: err.message,
+        code: err.code,
+        path: req.path,
+      });
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: 'Product service unavailable. Please try again.',
+          error: err.message,
+        });
+      }
+    },
   })
 );
 
@@ -84,6 +114,36 @@ router.use(
     pathRewrite: {
       '^/api/orders': '/api/orders',
     },
+    timeout: 30000,
+    proxyTimeout: 30000,
+    onProxyReq: (proxyReq, req, res) => {
+      console.log(`[Proxy] ${req.method} ${req.path} -> ${ORDER_SERVICE}${req.path}`);
+      
+      // If body was parsed by express.json(), re-stringify it for forwarding
+      if (req.body && Object.keys(req.body).length > 0) {
+        const bodyString = JSON.stringify(req.body);
+        proxyReq.setHeader('Content-Type', 'application/json');
+        proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyString));
+        proxyReq.write(bodyString);
+      }
+    },
+    onProxyRes: (proxyRes, req, res) => {
+      console.log(`[Proxy] Response: ${proxyRes.statusCode} for ${req.method} ${req.path}`);
+    },
+    onError: (err, req, res) => {
+      console.error('[Proxy] Order proxy error:', {
+        message: err.message,
+        code: err.code,
+        path: req.path,
+      });
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: 'Order service unavailable. Please try again.',
+          error: err.message,
+        });
+      }
+    },
   })
 );
 
@@ -98,6 +158,51 @@ router.use(
     changeOrigin: true,
     pathRewrite: {
       '^/api/deliveries': '/api/deliveries',
+    },
+  })
+);
+
+// Fleet Management routes (vehicles and drivers)
+router.use(
+  '/api/fleet',
+  authenticateToken,
+  requireAuth,
+  apiLimiter,
+  createProxyMiddleware({
+    target: DELIVERY_SERVICE,
+    changeOrigin: true,
+    pathRewrite: {
+      '^/api/fleet': '/api/fleet',
+    },
+    timeout: 30000,
+    proxyTimeout: 30000,
+    onProxyReq: (proxyReq, req, res) => {
+      console.log(`[Proxy] ${req.method} ${req.path} -> ${DELIVERY_SERVICE}${req.path}`);
+      
+      // If body was parsed by express.json(), re-stringify it for forwarding
+      if (req.body && Object.keys(req.body).length > 0) {
+        const bodyString = JSON.stringify(req.body);
+        proxyReq.setHeader('Content-Type', 'application/json');
+        proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyString));
+        proxyReq.write(bodyString);
+      }
+    },
+    onProxyRes: (proxyRes, req, res) => {
+      console.log(`[Proxy] Response: ${proxyRes.statusCode} for ${req.method} ${req.path}`);
+    },
+    onError: (err, req, res) => {
+      console.error('[Proxy] Fleet proxy error:', {
+        message: err.message,
+        code: err.code,
+        path: req.path,
+      });
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: 'Fleet service unavailable. Please try again.',
+          error: err.message,
+        });
+      }
     },
   })
 );

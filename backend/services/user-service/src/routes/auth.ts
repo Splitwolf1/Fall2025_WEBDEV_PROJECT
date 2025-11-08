@@ -187,6 +187,43 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 });
 
+// Get user by ID (for service-to-service calls)
+router.get('/users/:id', async (req: Request, res: Response) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        profile: user.profile,
+        farmDetails: user.farmDetails,
+        restaurantDetails: user.restaurantDetails,
+        distributorDetails: user.distributorDetails,
+        inspectorDetails: user.inspectorDetails,
+        emailVerified: user.emailVerified,
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('Get user by ID error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message,
+    });
+  }
+});
+
 // Get current user
 router.get('/me', authenticateToken, async (req: Request, res: Response) => {
   try {
@@ -216,6 +253,52 @@ router.get('/me', authenticateToken, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Get user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message,
+    });
+  }
+});
+
+// Get all users by role (for restaurants to find farmers/suppliers)
+router.get('/users', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { role } = req.query;
+
+    if (!role) {
+      return res.status(400).json({
+        success: false,
+        message: 'Role parameter is required',
+      });
+    }
+
+    // Only allow fetching farmers for now (suppliers for restaurants)
+    if (role !== UserRole.FARMER) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only farmers can be fetched as suppliers',
+      });
+    }
+
+    const users = await User.find({ 
+      role: role as UserRole,
+      isActive: true 
+    }).select('-password').sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      users: users.map(user => ({
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        profile: user.profile,
+        farmDetails: user.farmDetails,
+        createdAt: user.createdAt,
+      })),
+    });
+  } catch (error: any) {
+    console.error('Get users by role error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',

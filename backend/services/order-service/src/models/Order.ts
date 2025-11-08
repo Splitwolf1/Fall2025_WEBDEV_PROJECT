@@ -53,7 +53,7 @@ const OrderSchema = new Schema<IOrder>(
   {
     orderNumber: {
       type: String,
-      required: true,
+      required: false, // Will be auto-generated in pre-save hook
       unique: true,
     },
     customerId: {
