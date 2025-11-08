@@ -190,6 +190,10 @@ export default function BrowseProductsPage() {
           state: 'State',
           zipCode: '12345',
           country: 'USA',
+          coordinates: {
+            lat: 0, // Default coordinates - should be replaced with actual restaurant location
+            lng: 0,
+          },
         },
         notes: 'Order placed via browse page',
       });
