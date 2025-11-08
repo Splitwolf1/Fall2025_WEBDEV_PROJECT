@@ -233,7 +233,7 @@ export default function DistributorDeliveriesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-gray-900">
-              {mockDeliveries.reduce((sum, d) => sum + d.totalStops, 0)}
+              {deliveries.length * 2}
             </div>
             <p className="text-xs text-gray-500 mt-1">All routes today</p>
           </CardContent>
