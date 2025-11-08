@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { auth } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
+import { socketClient } from '@/lib/socket-client';
 
 interface Delivery {
   _id: string;
@@ -72,6 +73,21 @@ export default function DistributorDashboard() {
     }
     setUser(currentUser);
     fetchDashboardData(currentUser.id);
+
+    // Listen for real-time updates via Socket.io
+    const handleNotification = (notification: any) => {
+      // Refresh dashboard data when delivery/order notifications arrive
+      if (notification.type === 'delivery' || notification.type === 'order') {
+        fetchDashboardData(currentUser.id);
+      }
+    };
+
+    socketClient.onNotification(handleNotification);
+
+    // Cleanup
+    return () => {
+      socketClient.offNotification(handleNotification);
+    };
   }, [router]);
 
   const fetchDashboardData = async (distributorId: string) => {
@@ -119,58 +135,101 @@ export default function DistributorDashboard() {
       });
 
       // Calculate today's revenue from completed deliveries
-      const todayRevenue = todayCompleted.reduce((sum: number, d: Delivery) => {
-        // Would need to fetch order details for accurate revenue
-        return sum + 0; // Placeholder
-      }, 0);
+      let todayRevenue = 0;
+      for (const delivery of todayCompleted) {
+        try {
+          const orderResponse: any = await apiClient.getOrder(delivery.orderId);
+          if (orderResponse.success && orderResponse.order) {
+            todayRevenue += orderResponse.order.totalAmount || 0;
+          }
+        } catch (err) {
+          // Skip if order not found
+        }
+      }
 
-      // Format active routes
-      const formattedRoutes = activeDeliveriesList.slice(0, 3).map((delivery: Delivery) => {
-        // Fetch order details to get items
-        // For now, using placeholder data
-        const items = ['Items loading...'];
-        
-        return {
-          id: `ROUTE-${delivery._id.slice(-3)}`,
-          driver: delivery.driverName || 'Unassigned',
-          vehicle: delivery.vehicleId || 'N/A',
-          stops: 1, // Would need route details
-          completed: delivery.status === 'delivered' ? 1 : 0,
-          currentStop: 'Loading...', // Would need current location
-          eta: 'TBD',
-          status: delivery.status === 'in_transit' ? 'on_time' : 
-                  delivery.status === 'picked_up' ? 'picking_up' : 'scheduled',
-          pickupTime: delivery.route?.pickup?.scheduledTime 
-            ? new Date(delivery.route.pickup.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-            : 'TBD',
-          items,
-          deliveryId: delivery._id,
-        };
-      });
+      // Format active routes - fetch order details for items
+      const formattedRoutes = await Promise.all(
+        activeDeliveriesList.slice(0, 3).map(async (delivery: Delivery) => {
+          let items: string[] = [];
+          try {
+            const orderResponse: any = await apiClient.getOrder(delivery.orderId);
+            if (orderResponse.success && orderResponse.order?.items) {
+              items = orderResponse.order.items.map((item: any) => 
+                `${item.productName} (${item.quantity} ${item.unit})`
+              );
+            }
+          } catch (err) {
+            items = ['Items loading...'];
+          }
+          
+          return {
+            id: `ROUTE-${delivery._id.slice(-3)}`,
+            driver: delivery.driverName || 'Unassigned',
+            vehicle: delivery.vehicleId || 'N/A',
+            stops: 1, // Single delivery per route
+            completed: delivery.status === 'delivered' ? 1 : 0,
+            currentStop: delivery.route?.delivery?.location?.address || 'En route',
+            eta: delivery.route?.delivery?.scheduledTime 
+              ? new Date(delivery.route.delivery.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+              : 'TBD',
+            status: delivery.status === 'in_transit' ? 'on_time' : 
+                    delivery.status === 'picked_up' ? 'picking_up' : 'scheduled',
+            pickupTime: delivery.route?.pickup?.scheduledTime 
+              ? new Date(delivery.route.pickup.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+              : 'TBD',
+            items,
+            deliveryId: delivery._id,
+          };
+        })
+      );
 
-      // Get upcoming pickups (scheduled deliveries)
-      const upcomingDeliveries = deliveries
+      // Get upcoming pickups (scheduled deliveries) - fetch order details
+      const upcomingDeliveriesList = deliveries
         .filter((d: Delivery) => d.status === 'scheduled')
         .sort((a: Delivery, b: Delivery) => 
           new Date(a.route?.pickup?.scheduledTime || a.createdAt).getTime() - 
           new Date(b.route?.pickup?.scheduledTime || b.createdAt).getTime()
         )
-        .slice(0, 3)
-        .map((delivery: Delivery) => {
+        .slice(0, 3);
+
+      const upcomingDeliveries = await Promise.all(
+        upcomingDeliveriesList.map(async (delivery: Delivery) => {
           const pickupTime = delivery.route?.pickup?.scheduledTime
             ? new Date(delivery.route.pickup.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
             : 'TBD';
           
+          let farm = 'Loading...';
+          let items = 'Loading items...';
+          let destination = 'Loading...';
+          
+          try {
+            const orderResponse: any = await apiClient.getOrder(delivery.orderId);
+            if (orderResponse.success && orderResponse.order) {
+              const order = orderResponse.order;
+              // Get farmer name from order items
+              if (order.items && order.items.length > 0) {
+                farm = order.items[0].farmerName || 'Farm';
+                items = order.items.map((item: any) => 
+                  `${item.productName} (${item.quantity} ${item.unit})`
+                ).join(', ');
+              }
+              destination = delivery.route?.delivery?.location?.address || order.shippingAddress || 'Address not available';
+            }
+          } catch (err) {
+            // Keep placeholder values
+          }
+          
           return {
             id: `PICKUP-${delivery._id.slice(-3)}`,
-            farm: 'Loading...', // Would need to fetch order -> farmer details
+            farm,
             time: pickupTime,
-            items: 'Loading items...', // Would need order details
-            destination: 'Loading...', // Would need delivery address
+            items,
+            destination,
             priority: 'normal',
             deliveryId: delivery._id,
           };
-        });
+        })
+      );
 
       // Fleet status (simplified - would need fleet management system)
       const uniqueVehicles = new Set<string>();
@@ -188,6 +247,43 @@ export default function DistributorDashboard() {
         fuel: 'N/A', // Would need fleet management data
       }));
 
+      // Calculate average delivery time from completed deliveries
+      let avgDeliveryTime = 'N/A';
+      let deliveryTimeCount = 0;
+      
+      const completedDeliveries = deliveries.filter((d: Delivery) => d.status === 'delivered');
+      let totalHours = 0;
+      
+      for (const delivery of completedDeliveries.slice(0, 10)) { // Limit to avoid too many calculations
+        try {
+          const pickupTime = delivery.route?.pickup?.actualTime 
+            ? new Date(delivery.route.pickup.actualTime)
+            : delivery.route?.pickup?.scheduledTime
+            ? new Date(delivery.route.pickup.scheduledTime)
+            : null;
+          const deliveryTime = delivery.route?.delivery?.actualTime 
+            ? new Date(delivery.route.delivery.actualTime)
+            : null;
+          
+          if (pickupTime && deliveryTime && deliveryTime > pickupTime) {
+            const diffHours = (deliveryTime.getTime() - pickupTime.getTime()) / (1000 * 60 * 60);
+            totalHours += diffHours;
+            deliveryTimeCount++;
+          }
+        } catch (err) {
+          // Skip invalid dates
+        }
+      }
+      
+      if (deliveryTimeCount > 0) {
+        const avgHours = totalHours / deliveryTimeCount;
+        if (avgHours < 1) {
+          avgDeliveryTime = `${Math.round(avgHours * 60)} min`;
+        } else {
+          avgDeliveryTime = `${avgHours.toFixed(1)} hours`;
+        }
+      }
+
       setStats({
         activeDeliveries: {
           value: activeDeliveriesList.length.toString(),
@@ -202,8 +298,8 @@ export default function DistributorDashboard() {
           change: '0%', // Would need previous day comparison
         },
         avgDeliveryTime: {
-          value: 'N/A', // Would need delivery time calculation
-          status: 'N/A',
+          value: avgDeliveryTime,
+          status: deliveryTimeCount > 0 ? `${deliveryTimeCount} deliveries` : 'N/A',
         },
       });
 

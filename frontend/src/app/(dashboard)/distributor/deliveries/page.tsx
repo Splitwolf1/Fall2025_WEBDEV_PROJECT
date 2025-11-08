@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,103 +20,145 @@ import {
   Phone,
   Navigation,
   Play,
-  Pause
+  Pause,
+  Loader2,
 } from 'lucide-react';
+import { auth } from '@/lib/auth';
+import { apiClient } from '@/lib/api-client';
+import { socketClient } from '@/lib/socket-client';
 
-// Mock delivery data
-const mockDeliveries = [
-  {
-    id: 'DEL-101',
-    routeId: 'RT-301',
-    driver: 'John Smith',
-    driverPhone: '(555) 123-4567',
-    vehicle: 'Truck #3 (ABC-1234)',
-    status: 'in_progress',
-    progress: 40,
-    currentStop: 2,
-    totalStops: 5,
-    startTime: '7:00 AM',
-    estimatedCompletion: '2:30 PM',
-    stops: [
-      { name: 'Green Valley Farm', type: 'pickup', status: 'completed', time: '7:30 AM' },
-      { name: 'Sunny Acres', type: 'pickup', status: 'completed', time: '8:45 AM' },
-      { name: 'Fresh Bistro', type: 'delivery', status: 'in_progress', time: '10:00 AM' },
-      { name: 'Green Leaf Restaurant', type: 'delivery', status: 'pending', time: '11:30 AM' },
-      { name: 'Farm Table Cafe', type: 'delivery', status: 'pending', time: '1:00 PM' },
-    ],
-  },
-  {
-    id: 'DEL-102',
-    routeId: 'RT-302',
-    driver: 'Sarah Johnson',
-    driverPhone: '(555) 234-5678',
-    vehicle: 'Van #5 (XYZ-5678)',
-    status: 'scheduled',
-    progress: 0,
-    currentStop: 0,
-    totalStops: 4,
-    startTime: '8:30 AM',
-    estimatedCompletion: '1:00 PM',
-    stops: [
-      { name: 'Harvest Hill Farm', type: 'pickup', status: 'pending', time: '9:00 AM' },
-      { name: 'Organic Meadows', type: 'pickup', status: 'pending', time: '10:15 AM' },
-      { name: 'Urban Kitchen', type: 'delivery', status: 'pending', time: '11:45 AM' },
-      { name: 'Harvest Moon Grill', type: 'delivery', status: 'pending', time: '12:30 PM' },
-    ],
-  },
-  {
-    id: 'DEL-103',
-    routeId: 'RT-303',
-    driver: 'Mike Davis',
-    driverPhone: '(555) 345-6789',
-    vehicle: 'Truck #1 (LMN-9012)',
-    status: 'completed',
-    progress: 100,
-    currentStop: 6,
-    totalStops: 6,
-    startTime: '6:00 AM',
-    estimatedCompletion: '1:00 PM',
-    completedAt: '12:45 PM',
-    stops: [
-      { name: 'Green Valley Farm', type: 'pickup', status: 'completed', time: '6:30 AM' },
-      { name: 'Sunny Acres', type: 'pickup', status: 'completed', time: '7:45 AM' },
-      { name: 'Fresh Bistro', type: 'delivery', status: 'completed', time: '9:00 AM' },
-      { name: 'Urban Kitchen', type: 'delivery', status: 'completed', time: '10:30 AM' },
-      { name: 'Green Leaf Restaurant', type: 'delivery', status: 'completed', time: '11:45 AM' },
-      { name: 'Farm Table Cafe', type: 'delivery', status: 'completed', time: '12:30 PM' },
-    ],
-  },
-];
+type DeliveryStatus = 'all' | 'scheduled' | 'in_progress' | 'completed' | 'picked_up' | 'in_transit' | 'delivered';
 
-type DeliveryStatus = 'all' | 'scheduled' | 'in_progress' | 'completed';
+interface Delivery {
+  _id: string;
+  distributorId: string;
+  orderId: string;
+  status: string;
+  route: {
+    pickup: {
+      location: any;
+      scheduledTime: string;
+      actualTime?: string;
+    };
+    delivery: {
+      location: any;
+      scheduledTime: string;
+      actualTime?: string;
+    };
+  };
+  driverName?: string;
+  vehicleId?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+interface Order {
+  _id: string;
+  items: Array<{
+    productName: string;
+    quantity: number;
+    unit: string;
+    farmerName?: string;
+  }>;
+  shippingAddress?: string;
+}
 
 export default function DistributorDeliveriesPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<DeliveryStatus>('all');
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [orders, setOrders] = useState<{ [key: string]: Order }>({});
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredDeliveries = mockDeliveries.filter(delivery => {
+  useEffect(() => {
+    const currentUser = auth.getCurrentUser();
+    if (!currentUser) {
+      router.push('/login');
+      return;
+    }
+    fetchDeliveries(currentUser.id);
+
+    // Listen for real-time updates via Socket.io
+    const handleNotification = (notification: any) => {
+      if (notification.type === 'delivery' || notification.type === 'order') {
+        fetchDeliveries(currentUser.id);
+      }
+    };
+
+    socketClient.onNotification(handleNotification);
+
+    return () => {
+      socketClient.offNotification(handleNotification);
+    };
+  }, [router]);
+
+  const fetchDeliveries = async (distributorId: string) => {
+    try {
+      setIsLoading(true);
+      const deliveriesResponse: any = await apiClient.getDeliveries({ distributorId, limit: '100' });
+      const deliveriesList = deliveriesResponse.success ? deliveriesResponse.deliveries || [] : [];
+      
+      // Fetch orders for each delivery
+      const ordersMap: { [key: string]: Order } = {};
+      for (const delivery of deliveriesList) {
+        try {
+          const orderResponse: any = await apiClient.getOrder(delivery.orderId);
+          if (orderResponse.success && orderResponse.order) {
+            ordersMap[delivery.orderId] = orderResponse.order;
+          }
+        } catch (err) {
+          // Skip if order not found
+        }
+      }
+      
+      setDeliveries(deliveriesList);
+      setOrders(ordersMap);
+    } catch (error) {
+      console.error('Error fetching deliveries:', error);
+      setDeliveries([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const filteredDeliveries = deliveries.filter(delivery => {
+    const order = orders[delivery.orderId];
     const matchesSearch =
-      delivery.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      delivery.driver.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      delivery.routeId.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || delivery.status === statusFilter;
+      delivery._id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (delivery.driverName?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+      (delivery.vehicleId?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+      (order?.items?.[0]?.productName?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
+    
+    let matchesStatus = true;
+    if (statusFilter === 'all') {
+      matchesStatus = true;
+    } else if (statusFilter === 'in_progress') {
+      matchesStatus = delivery.status === 'picked_up' || delivery.status === 'in_transit';
+    } else if (statusFilter === 'completed') {
+      matchesStatus = delivery.status === 'delivered';
+    } else {
+      matchesStatus = delivery.status === statusFilter;
+    }
+    
     return matchesSearch && matchesStatus;
   });
 
   const statusCounts = {
-    all: mockDeliveries.length,
-    scheduled: mockDeliveries.filter(d => d.status === 'scheduled').length,
-    in_progress: mockDeliveries.filter(d => d.status === 'in_progress').length,
-    completed: mockDeliveries.filter(d => d.status === 'completed').length,
+    all: deliveries.length,
+    scheduled: deliveries.filter(d => d.status === 'scheduled').length,
+    in_progress: deliveries.filter(d => d.status === 'picked_up' || d.status === 'in_transit').length,
+    completed: deliveries.filter(d => d.status === 'delivered').length,
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'scheduled':
         return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Scheduled</Badge>;
-      case 'in_progress':
+      case 'picked_up':
+      case 'in_transit':
         return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">In Progress</Badge>;
-      case 'completed':
+      case 'delivered':
         return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Completed</Badge>;
       default:
         return <Badge>{status}</Badge>;
@@ -222,7 +265,14 @@ export default function DistributorDeliveriesPage() {
         </TabsList>
 
         <TabsContent value={statusFilter} className="mt-6 space-y-4">
-          {filteredDeliveries.length === 0 ? (
+          {isLoading ? (
+            <Card>
+              <CardContent className="text-center py-12">
+                <Loader2 className="h-12 w-12 text-gray-300 mx-auto mb-3 animate-spin" />
+                <h3 className="text-lg font-medium text-gray-900">Loading deliveries...</h3>
+              </CardContent>
+            </Card>
+          ) : filteredDeliveries.length === 0 ? (
             <Card>
               <CardContent className="text-center py-12">
                 <Truck className="h-12 w-12 text-gray-300 mx-auto mb-3" />
@@ -231,18 +281,51 @@ export default function DistributorDeliveriesPage() {
               </CardContent>
             </Card>
           ) : (
-            filteredDeliveries.map((delivery) => (
-              <Card key={delivery.id} className="hover:shadow-md transition-shadow">
+            filteredDeliveries.map((delivery) => {
+              const order = orders[delivery.orderId];
+              const isInProgress = delivery.status === 'picked_up' || delivery.status === 'in_transit';
+              const isCompleted = delivery.status === 'delivered';
+              
+              // Calculate progress
+              let progress = 0;
+              if (isCompleted) {
+                progress = 100;
+              } else if (isInProgress) {
+                progress = 50;
+              }
+              
+              // Get stops (pickup and delivery)
+              const stops = [
+                {
+                  name: order?.items?.[0]?.farmerName || 'Farm',
+                  type: 'pickup',
+                  status: delivery.status === 'delivered' || isInProgress ? 'completed' : 'pending',
+                  time: delivery.route?.pickup?.scheduledTime
+                    ? new Date(delivery.route.pickup.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                    : 'TBD',
+                },
+                {
+                  name: order?.shippingAddress?.split(',')[0] || 'Restaurant',
+                  type: 'delivery',
+                  status: isCompleted ? 'completed' : isInProgress ? 'in_progress' : 'pending',
+                  time: delivery.route?.delivery?.scheduledTime
+                    ? new Date(delivery.route.delivery.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                    : 'TBD',
+                },
+              ];
+              
+              return (
+              <Card key={delivery._id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="space-y-4">
                     {/* Header */}
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-3">
-                          <h3 className="font-semibold text-lg">{delivery.id}</h3>
+                          <h3 className="font-semibold text-lg">DEL-{delivery._id.slice(-6)}</h3>
                           {getStatusBadge(delivery.status)}
                         </div>
-                        <p className="text-sm text-gray-500 mt-1">Route {delivery.routeId}</p>
+                        <p className="text-sm text-gray-500 mt-1">Order {delivery.orderId.slice(-6)}</p>
                       </div>
                       {delivery.status === 'scheduled' && (
                         <Button>
@@ -250,7 +333,7 @@ export default function DistributorDeliveriesPage() {
                           Start Route
                         </Button>
                       )}
-                      {delivery.status === 'in_progress' && (
+                      {isInProgress && (
                         <Button variant="outline">
                           <Pause className="h-4 w-4 mr-2" />
                           Pause Route
@@ -262,38 +345,44 @@ export default function DistributorDeliveriesPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                       <div className="flex items-center gap-2 text-gray-600">
                         <Package className="h-4 w-4" />
-                        <span>Driver: {delivery.driver}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Phone className="h-4 w-4" />
-                        <span>{delivery.driverPhone}</span>
+                        <span>Driver: {delivery.driverName || 'Unassigned'}</span>
                       </div>
                       <div className="flex items-center gap-2 text-gray-600">
                         <Navigation className="h-4 w-4" />
-                        <span>{delivery.vehicle}</span>
+                        <span>Vehicle: {delivery.vehicleId || 'N/A'}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <Calendar className="h-4 w-4" />
+                        <span>Created: {new Date(delivery.createdAt).toLocaleDateString()}</span>
                       </div>
                     </div>
 
                     {/* Timeline */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm bg-gray-50 p-3 rounded-lg">
                       <div>
-                        <p className="text-gray-500">Start Time</p>
-                        <p className="font-medium text-gray-900">{delivery.startTime}</p>
+                        <p className="text-gray-500">Pickup Time</p>
+                        <p className="font-medium text-gray-900">
+                          {delivery.route?.pickup?.scheduledTime
+                            ? new Date(delivery.route.pickup.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                            : 'TBD'}
+                        </p>
                       </div>
                       <div>
                         <p className="text-gray-500">
-                          {delivery.status === 'completed' ? 'Completed At' : 'Est. Completion'}
+                          {isCompleted ? 'Delivered At' : 'Est. Delivery'}
                         </p>
                         <p className="font-medium text-gray-900">
-                          {delivery.status === 'completed'
-                            ? delivery.completedAt
-                            : delivery.estimatedCompletion}
+                          {isCompleted && delivery.route?.delivery?.actualTime
+                            ? new Date(delivery.route.delivery.actualTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                            : delivery.route?.delivery?.scheduledTime
+                            ? new Date(delivery.route.delivery.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                            : 'TBD'}
                         </p>
                       </div>
                       <div>
                         <p className="text-gray-500">Stops Progress</p>
                         <p className="font-medium text-gray-900">
-                          {delivery.currentStop} / {delivery.totalStops} completed
+                          {isCompleted ? '2' : isInProgress ? '1' : '0'} / 2 completed
                         </p>
                       </div>
                     </div>
@@ -303,9 +392,9 @@ export default function DistributorDeliveriesPage() {
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm text-gray-600">
                           <span>Route Progress</span>
-                          <span>{delivery.progress}%</span>
+                          <span>{progress}%</span>
                         </div>
-                        <Progress value={delivery.progress} className="h-2" />
+                        <Progress value={progress} className="h-2" />
                       </div>
                     )}
 
@@ -313,10 +402,10 @@ export default function DistributorDeliveriesPage() {
                     <div>
                       <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
                         <MapPin className="h-4 w-4" />
-                        Stops ({delivery.totalStops})
+                        Stops (2)
                       </h4>
                       <div className="space-y-2">
-                        {delivery.stops.map((stop, idx) => (
+                        {stops.map((stop, idx) => (
                           <div
                             key={idx}
                             className={`flex items-center justify-between p-3 rounded-lg border ${
@@ -379,7 +468,8 @@ export default function DistributorDeliveriesPage() {
                   </div>
                 </CardContent>
               </Card>
-            ))
+              );
+            })
           )}
         </TabsContent>
       </Tabs>

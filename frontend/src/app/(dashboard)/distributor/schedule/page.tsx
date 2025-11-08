@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,90 +17,163 @@ import {
   Package,
   Truck,
   Plus,
-  Eye
+  Eye,
+  Loader2,
 } from 'lucide-react';
+import { auth } from '@/lib/auth';
+import { apiClient } from '@/lib/api-client';
+import { socketClient } from '@/lib/socket-client';
 
-// Mock schedule data
-const mockSchedule = [
-  {
-    id: 'SCH-001',
-    date: '2025-11-06',
-    timeSlot: '7:00 AM - 2:00 PM',
-    type: 'pickup',
-    location: 'Green Valley Farm',
-    address: '123 Farm Rd, Portland, OR',
-    driver: 'John Smith',
-    vehicle: 'Truck #3',
-    items: ['Tomatoes (50 lbs)', 'Lettuce (30 lbs)'],
-    notes: 'Early morning pickup preferred',
-    status: 'scheduled',
-  },
-  {
-    id: 'SCH-002',
-    date: '2025-11-06',
-    timeSlot: '10:00 AM - 12:00 PM',
-    type: 'delivery',
-    location: 'Fresh Bistro',
-    address: '456 Main St, Portland, OR',
-    driver: 'John Smith',
-    vehicle: 'Truck #3',
-    items: ['Tomatoes (15 lbs)', 'Lettuce (10 lbs)'],
-    notes: 'Use back entrance',
-    status: 'scheduled',
-  },
-  {
-    id: 'SCH-003',
-    date: '2025-11-06',
-    timeSlot: '8:30 AM - 10:30 AM',
-    type: 'pickup',
-    location: 'Sunny Acres',
-    address: '789 Oak Ave, Beaverton, OR',
-    driver: 'Sarah Johnson',
-    vehicle: 'Van #5',
-    items: ['Carrots (40 lbs)', 'Peppers (20 lbs)'],
-    notes: '',
-    status: 'scheduled',
-  },
-  {
-    id: 'SCH-004',
-    date: '2025-11-07',
-    timeSlot: '9:00 AM - 11:00 AM',
-    type: 'pickup',
-    location: 'Harvest Hill Farm',
-    address: '321 Hill Rd, Hillsboro, OR',
-    driver: 'Mike Davis',
-    vehicle: 'Truck #1',
-    items: ['Spinach (25 lbs)', 'Kale (20 lbs)'],
-    notes: 'Contact farm manager on arrival',
-    status: 'confirmed',
-  },
-  {
-    id: 'SCH-005',
-    date: '2025-11-07',
-    timeSlot: '7:00 AM - 9:00 AM',
-    type: 'delivery',
-    location: 'Urban Kitchen',
-    address: '654 Pine Rd, Portland, OR',
-    driver: 'Lisa Brown',
-    vehicle: 'Van #2',
-    items: ['Mixed Greens (15 lbs)', 'Herbs (5 lbs)'],
-    notes: 'Deliver to chef directly',
-    status: 'confirmed',
-  },
-];
+interface Delivery {
+  _id: string;
+  distributorId: string;
+  orderId: string;
+  status: string;
+  route: {
+    pickup: {
+      location: any;
+      scheduledTime: string;
+      actualTime?: string;
+    };
+    delivery: {
+      location: any;
+      scheduledTime: string;
+      actualTime?: string;
+    };
+  };
+  driverName?: string;
+  vehicleId?: string;
+  createdAt: string;
+}
+
+interface ScheduleItem {
+  id: string;
+  date: string;
+  timeSlot: string;
+  type: string;
+  location: string;
+  address: string;
+  driver: string;
+  vehicle: string;
+  items: string[];
+  notes: string;
+  status: string;
+}
 
 export default function DistributorSchedulePage() {
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date(2025, 10, 6));
+  const router = useRouter();
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [selectedSchedule, setSelectedSchedule] = useState<typeof mockSchedule[0] | null>(null);
+  const [selectedSchedule, setSelectedSchedule] = useState<ScheduleItem | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const currentUser = auth.getCurrentUser();
+    if (!currentUser) {
+      router.push('/login');
+      return;
+    }
+    fetchSchedule(currentUser.id);
+
+    // Listen for real-time updates
+    const handleNotification = (notification: any) => {
+      if (notification.type === 'delivery' || notification.type === 'order') {
+        fetchSchedule(currentUser.id);
+      }
+    };
+
+    socketClient.onNotification(handleNotification);
+
+    return () => {
+      socketClient.offNotification(handleNotification);
+    };
+  }, [router]);
+
+  const fetchSchedule = async (distributorId: string) => {
+    try {
+      setIsLoading(true);
+      const deliveriesResponse: any = await apiClient.getDeliveries({ distributorId, limit: '100' });
+      const deliveries = deliveriesResponse.success ? deliveriesResponse.deliveries || [] : [];
+
+      // Convert deliveries to schedule items
+      const scheduleList: ScheduleItem[] = [];
+      
+      for (const delivery of deliveries) {
+        try {
+          const orderResponse: any = await apiClient.getOrder(delivery.orderId);
+          if (orderResponse.success && orderResponse.order) {
+            const order = orderResponse.order;
+            
+            // Pickup schedule item
+            if (delivery.route?.pickup?.scheduledTime) {
+              const pickupDate = new Date(delivery.route.pickup.scheduledTime);
+              const pickupEnd = new Date(pickupDate.getTime() + 30 * 60000); // 30 min window
+              
+              scheduleList.push({
+                id: `PICKUP-${delivery._id}`,
+                date: pickupDate.toISOString().split('T')[0],
+                timeSlot: `${pickupDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} - ${pickupEnd.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
+                type: 'pickup',
+                location: order.items?.[0]?.farmerName || 'Farm',
+                address: delivery.route.pickup.location?.address || 'Address not available',
+                driver: delivery.driverName || 'Unassigned',
+                vehicle: delivery.vehicleId || 'N/A',
+                items: order.items?.map((item: any) => `${item.productName} (${item.quantity} ${item.unit})`) || [],
+                notes: '',
+                status: delivery.status === 'delivered' || delivery.status === 'picked_up' || delivery.status === 'in_transit' ? 'completed' : 'scheduled',
+              });
+            }
+
+            // Delivery schedule item
+            if (delivery.route?.delivery?.scheduledTime) {
+              const deliveryDate = new Date(delivery.route.delivery.scheduledTime);
+              const deliveryEnd = new Date(deliveryDate.getTime() + 15 * 60000); // 15 min window
+              
+              scheduleList.push({
+                id: `DELIVERY-${delivery._id}`,
+                date: deliveryDate.toISOString().split('T')[0],
+                timeSlot: `${deliveryDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} - ${deliveryEnd.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
+                type: 'delivery',
+                location: order.shippingAddress?.split(',')[0] || 'Restaurant',
+                address: delivery.route.delivery.location?.address || order.shippingAddress || 'Address not available',
+                driver: delivery.driverName || 'Unassigned',
+                vehicle: delivery.vehicleId || 'N/A',
+                items: order.items?.map((item: any) => `${item.productName} (${item.quantity} ${item.unit})`) || [],
+                notes: '',
+                status: delivery.status === 'delivered' ? 'completed' : delivery.status === 'in_transit' ? 'confirmed' : 'scheduled',
+              });
+            }
+          }
+        } catch (err) {
+          // Skip if order not found
+        }
+      }
+
+      setSchedule(scheduleList);
+    } catch (error) {
+      console.error('Error fetching schedule:', error);
+      setSchedule([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getScheduleForDate = (date: Date) => {
     const dateStr = date.toISOString().split('T')[0];
-    return mockSchedule.filter(sch => sch.date === dateStr);
+    return schedule.filter(sch => sch.date === dateStr);
   };
 
+
   const selectedDateSchedules = selectedDate ? getScheduleForDate(selectedDate) : [];
+  
+  // Calculate stats for selected date
+  const todaySchedules = schedule.filter(s => {
+    const scheduleDate = new Date(s.date);
+    const today = new Date();
+    return scheduleDate.toDateString() === today.toDateString();
+  });
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -180,7 +254,7 @@ export default function DistributorSchedulePage() {
             <CardTitle className="text-sm font-medium text-gray-600">This Week</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">{mockSchedule.length}</div>
+            <div className="text-2xl font-bold text-gray-900">{schedule.length}</div>
             <p className="text-xs text-gray-500 mt-1">Total schedules</p>
           </CardContent>
         </Card>
@@ -234,7 +308,12 @@ export default function DistributorSchedulePage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {selectedDateSchedules.length === 0 ? (
+            {isLoading ? (
+              <div className="text-center py-12">
+                <Loader2 className="h-12 w-12 text-gray-300 mx-auto mb-3 animate-spin" />
+                <h3 className="text-lg font-medium text-gray-900">Loading schedule...</h3>
+              </div>
+            ) : selectedDateSchedules.length === 0 ? (
               <div className="text-center py-12">
                 <CalendarIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                 <h3 className="text-lg font-medium text-gray-900">No schedules</h3>
@@ -246,25 +325,25 @@ export default function DistributorSchedulePage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {selectedDateSchedules.map((schedule) => (
-                  <Card key={schedule.id} className="hover:shadow-md transition-shadow">
+                {selectedDateSchedules.map((scheduleItem) => (
+                  <Card key={scheduleItem.id} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-4">
                       <div className="flex flex-col gap-3">
                         {/* Header */}
                         <div className="flex items-start justify-between">
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              {getTypeBadge(schedule.type)}
-                              {getStatusBadge(schedule.status)}
+                              {getTypeBadge(scheduleItem.type)}
+                              {getStatusBadge(scheduleItem.status)}
                             </div>
-                            <h4 className="font-semibold text-gray-900">{schedule.location}</h4>
-                            <p className="text-sm text-gray-500">{schedule.address}</p>
+                            <h4 className="font-semibold text-gray-900">{scheduleItem.location}</h4>
+                            <p className="text-sm text-gray-500">{scheduleItem.address}</p>
                           </div>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => {
-                              setSelectedSchedule(schedule);
+                              setSelectedSchedule(scheduleItem);
                               setShowDetailDialog(true);
                             }}
                           >
@@ -276,31 +355,31 @@ export default function DistributorSchedulePage() {
                         <div className="grid grid-cols-2 gap-2 text-sm">
                           <div className="flex items-center gap-2 text-gray-600">
                             <Clock className="h-4 w-4" />
-                            <span>{schedule.timeSlot}</span>
+                            <span>{scheduleItem.timeSlot}</span>
                           </div>
                           <div className="flex items-center gap-2 text-gray-600">
                             <Truck className="h-4 w-4" />
-                            <span>{schedule.driver}</span>
+                            <span>{scheduleItem.driver}</span>
                           </div>
                           <div className="flex items-center gap-2 text-gray-600">
                             <Package className="h-4 w-4" />
-                            <span>{schedule.items.length} items</span>
+                            <span>{scheduleItem.items.length} items</span>
                           </div>
                           <div className="flex items-center gap-2 text-gray-600">
                             <MapPin className="h-4 w-4" />
-                            <span>{schedule.vehicle}</span>
+                            <span>{scheduleItem.vehicle}</span>
                           </div>
                         </div>
 
                         {/* Items */}
                         <div className="bg-gray-50 p-2 rounded text-xs text-gray-600">
-                          {schedule.items.join(', ')}
+                          {scheduleItem.items.join(', ')}
                         </div>
 
                         {/* Notes */}
-                        {schedule.notes && (
+                        {scheduleItem.notes && (
                           <div className="bg-yellow-50 p-2 rounded text-xs text-gray-700 border border-yellow-200">
-                            <strong>Note:</strong> {schedule.notes}
+                            <strong>Note:</strong> {scheduleItem.notes}
                           </div>
                         )}
                       </div>

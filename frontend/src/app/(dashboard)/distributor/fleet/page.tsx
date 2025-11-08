@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,190 +22,179 @@ import {
   AlertTriangle,
   Wrench,
   Navigation,
-  TrendingUp
+  TrendingUp,
+  Loader2,
 } from 'lucide-react';
+import { auth } from '@/lib/auth';
+import { apiClient } from '@/lib/api-client';
+import { socketClient } from '@/lib/socket-client';
 
-// Mock fleet data
-const mockVehicles = [
-  {
-    id: 'VEH-001',
-    name: 'Truck #1',
-    make: 'Ford',
-    model: 'F-350',
-    year: 2022,
-    licensePlate: 'LMN-9012',
-    status: 'active',
-    currentDriver: 'Mike Davis',
-    currentLocation: 'En route to Urban Kitchen',
-    mileage: 45230,
-    lastMaintenance: '2025-10-15',
-    nextMaintenance: '2025-12-15',
-    fuelLevel: 75,
-    capacity: '2000 lbs',
-    deliveriesToday: 6,
-  },
-  {
-    id: 'VEH-002',
-    name: 'Van #2',
-    make: 'Mercedes',
-    model: 'Sprinter',
-    year: 2023,
-    licensePlate: 'XYZ-3456',
-    status: 'active',
-    currentDriver: 'Lisa Brown',
-    currentLocation: 'Loading at Green Valley Farm',
-    mileage: 28450,
-    lastMaintenance: '2025-10-28',
-    nextMaintenance: '2025-12-28',
-    fuelLevel: 92,
-    capacity: '1500 lbs',
-    deliveriesToday: 4,
-  },
-  {
-    id: 'VEH-003',
-    name: 'Truck #3',
-    make: 'Ford',
-    model: 'F-450',
-    year: 2021,
-    licensePlate: 'ABC-1234',
-    status: 'active',
-    currentDriver: 'John Smith',
-    currentLocation: 'En route to Fresh Bistro',
-    mileage: 67890,
-    lastMaintenance: '2025-10-20',
-    nextMaintenance: '2025-12-20',
-    fuelLevel: 65,
-    capacity: '2500 lbs',
-    deliveriesToday: 5,
-  },
-  {
-    id: 'VEH-004',
-    name: 'Van #4',
-    make: 'Ram',
-    model: 'ProMaster',
-    year: 2023,
-    licensePlate: 'DEF-5678',
-    status: 'maintenance',
-    currentDriver: null,
-    currentLocation: 'Service Center - Main St',
-    mileage: 15200,
-    lastMaintenance: '2025-11-03',
-    nextMaintenance: '2026-01-03',
-    fuelLevel: 0,
-    capacity: '1200 lbs',
-    deliveriesToday: 0,
-    maintenanceNote: 'Oil change and tire rotation',
-  },
-  {
-    id: 'VEH-005',
-    name: 'Van #5',
-    make: 'Mercedes',
-    model: 'Sprinter',
-    year: 2022,
-    licensePlate: 'GHI-9012',
-    status: 'available',
-    currentDriver: null,
-    currentLocation: 'Fleet Yard - Warehouse',
-    mileage: 34560,
-    lastMaintenance: '2025-10-18',
-    nextMaintenance: '2025-12-18',
-    fuelLevel: 100,
-    capacity: '1500 lbs',
-    deliveriesToday: 0,
-  },
-];
+interface Delivery {
+  _id: string;
+  distributorId: string;
+  orderId: string;
+  status: string;
+  driverName?: string;
+  vehicleId?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
 
-const mockDrivers = [
-  {
-    id: 'DRV-001',
-    name: 'John Smith',
-    phone: '(555) 123-4567',
-    email: 'john.smith@delivery.com',
-    status: 'on_route',
-    vehicleAssigned: 'Truck #3',
-    licensedSince: '2018',
-    deliveriesCompleted: 1245,
-    rating: 4.9,
-    deliveriesToday: 5,
-  },
-  {
-    id: 'DRV-002',
-    name: 'Sarah Johnson',
-    phone: '(555) 234-5678',
-    email: 'sarah.j@delivery.com',
-    status: 'scheduled',
-    vehicleAssigned: 'Van #5',
-    licensedSince: '2020',
-    deliveriesCompleted: 856,
-    rating: 4.8,
-    deliveriesToday: 4,
-  },
-  {
-    id: 'DRV-003',
-    name: 'Mike Davis',
-    phone: '(555) 345-6789',
-    email: 'mike.d@delivery.com',
-    status: 'on_route',
-    vehicleAssigned: 'Truck #1',
-    licensedSince: '2017',
-    deliveriesCompleted: 1532,
-    rating: 5.0,
-    deliveriesToday: 6,
-  },
-  {
-    id: 'DRV-004',
-    name: 'Lisa Brown',
-    phone: '(555) 456-7890',
-    email: 'lisa.b@delivery.com',
-    status: 'on_route',
-    vehicleAssigned: 'Van #2',
-    licensedSince: '2019',
-    deliveriesCompleted: 1024,
-    rating: 4.7,
-    deliveriesToday: 4,
-  },
-  {
-    id: 'DRV-005',
-    name: 'Tom Wilson',
-    phone: '(555) 567-8901',
-    email: 'tom.w@delivery.com',
-    status: 'off_duty',
-    vehicleAssigned: null,
-    licensedSince: '2021',
-    deliveriesCompleted: 423,
-    rating: 4.6,
-    deliveriesToday: 0,
-  },
-];
+interface Vehicle {
+  id: string;
+  name: string;
+  make: string;
+  model: string;
+  year: number;
+  licensePlate: string;
+  status: string;
+  currentDriver: string | null;
+  currentLocation: string;
+  mileage: number;
+  lastMaintenance: string;
+  nextMaintenance: string;
+  fuelLevel: number;
+  capacity: string;
+  deliveriesToday: number;
+  maintenanceNote?: string;
+}
+
+interface Driver {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  status: string;
+  vehicleAssigned: string | null;
+  licensedSince: string;
+  deliveriesCompleted: number;
+  rating: number;
+  deliveriesToday: number;
+}
 
 export default function DistributorFleetPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'vehicles' | 'drivers'>('vehicles');
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredVehicles = mockVehicles.filter(vehicle =>
-    vehicle.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    vehicle.licensePlate.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (vehicle.currentDriver?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
-  );
+  useEffect(() => {
+    const currentUser = auth.getCurrentUser();
+    if (!currentUser) {
+      router.push('/login');
+      return;
+    }
+    fetchFleetData(currentUser.id);
 
-  const filteredDrivers = mockDrivers.filter(driver =>
-    driver.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    driver.phone.includes(searchQuery) ||
-    driver.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    // Listen for real-time updates
+    const handleNotification = (notification: any) => {
+      if (notification.type === 'delivery' || notification.type === 'order') {
+        fetchFleetData(currentUser.id);
+      }
+    };
 
-  const vehicleStats = {
-    total: mockVehicles.length,
-    active: mockVehicles.filter(v => v.status === 'active').length,
-    available: mockVehicles.filter(v => v.status === 'available').length,
-    maintenance: mockVehicles.filter(v => v.status === 'maintenance').length,
-  };
+    socketClient.onNotification(handleNotification);
 
-  const driverStats = {
-    total: mockDrivers.length,
-    onRoute: mockDrivers.filter(d => d.status === 'on_route').length,
-    scheduled: mockDrivers.filter(d => d.status === 'scheduled').length,
-    offDuty: mockDrivers.filter(d => d.status === 'off_duty').length,
+    return () => {
+      socketClient.offNotification(handleNotification);
+    };
+  }, [router]);
+
+  const fetchFleetData = async (distributorId: string) => {
+    try {
+      setIsLoading(true);
+      const deliveriesResponse: any = await apiClient.getDeliveries({ distributorId, limit: '100' });
+      const deliveries = deliveriesResponse.success ? deliveriesResponse.deliveries || [] : [];
+
+      // Get today's date
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(today);
+      todayEnd.setHours(23, 59, 59, 999);
+
+      // Group deliveries by vehicle
+      const vehiclesMap: { [key: string]: Delivery[] } = {};
+      deliveries.forEach((delivery: Delivery) => {
+        if (delivery.vehicleId) {
+          if (!vehiclesMap[delivery.vehicleId]) {
+            vehiclesMap[delivery.vehicleId] = [];
+          }
+          vehiclesMap[delivery.vehicleId].push(delivery);
+        }
+      });
+
+      // Build vehicles list
+      const vehiclesList: Vehicle[] = Object.entries(vehiclesMap).map(([vehicleId, vehicleDeliveries]) => {
+        const activeDeliveries = vehicleDeliveries.filter(d => d.status === 'picked_up' || d.status === 'in_transit');
+        const todayDeliveries = vehicleDeliveries.filter(d => {
+          const deliveryDate = new Date(d.createdAt);
+          return deliveryDate >= today && deliveryDate <= todayEnd;
+        });
+
+        return {
+          id: vehicleId,
+          name: `Vehicle ${vehicleId.slice(-4)}`,
+          make: 'Unknown',
+          model: 'Unknown',
+          year: new Date().getFullYear(),
+          licensePlate: vehicleId.slice(-8).toUpperCase(),
+          status: activeDeliveries.length > 0 ? 'active' : 'available',
+          currentDriver: vehicleDeliveries[0]?.driverName || null,
+          currentLocation: activeDeliveries.length > 0 ? 'On route' : 'Fleet Yard',
+          mileage: 0, // Would need vehicle management system
+          lastMaintenance: 'N/A',
+          nextMaintenance: 'N/A',
+          fuelLevel: 100, // Would need vehicle management system
+          capacity: 'N/A',
+          deliveriesToday: todayDeliveries.length,
+        };
+      });
+
+      // Group deliveries by driver
+      const driversMap: { [key: string]: Delivery[] } = {};
+      deliveries.forEach((delivery: Delivery) => {
+        if (delivery.driverName) {
+          if (!driversMap[delivery.driverName]) {
+            driversMap[delivery.driverName] = [];
+          }
+          driversMap[delivery.driverName].push(delivery);
+        }
+      });
+
+      // Build drivers list
+      const driversList: Driver[] = Object.entries(driversMap).map(([driverName, driverDeliveries]) => {
+        const activeDeliveries = driverDeliveries.filter(d => d.status === 'picked_up' || d.status === 'in_transit');
+        const todayDeliveries = driverDeliveries.filter(d => {
+          const deliveryDate = new Date(d.createdAt);
+          return deliveryDate >= today && deliveryDate <= todayEnd;
+        });
+        const completedDeliveries = driverDeliveries.filter(d => d.status === 'delivered');
+
+        return {
+          id: `DRV-${driverName.replace(/\s+/g, '').slice(0, 6)}`,
+          name: driverName,
+          phone: '(555) 000-0000', // Would need driver profile
+          email: `${driverName.toLowerCase().replace(/\s+/g, '.')}@distributor.com`, // Would need driver profile
+          status: activeDeliveries.length > 0 ? 'on_route' : 'off_duty',
+          vehicleAssigned: driverDeliveries[0]?.vehicleId || null,
+          licensedSince: '2020', // Would need driver profile
+          deliveriesCompleted: completedDeliveries.length,
+          rating: 4.5, // Would need rating system
+          deliveriesToday: todayDeliveries.length,
+        };
+      });
+
+      setVehicles(vehiclesList);
+      setDrivers(driversList);
+    } catch (error) {
+      console.error('Error fetching fleet data:', error);
+      setVehicles([]);
+      setDrivers([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getVehicleStatusBadge = (status: string) => {
@@ -233,6 +223,32 @@ export default function DistributorFleetPage() {
     }
   };
 
+  const filteredVehicles = vehicles.filter(vehicle =>
+    vehicle.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    vehicle.licensePlate.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (vehicle.currentDriver?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
+  );
+
+  const filteredDrivers = drivers.filter(driver =>
+    driver.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    driver.phone.includes(searchQuery) ||
+    driver.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const vehicleStats = {
+    total: vehicles.length,
+    active: vehicles.filter(v => v.status === 'active').length,
+    available: vehicles.filter(v => v.status === 'available').length,
+    maintenance: vehicles.filter(v => v.status === 'maintenance').length,
+  };
+
+  const driverStats = {
+    total: drivers.length,
+    onRoute: drivers.filter(d => d.status === 'on_route').length,
+    scheduled: drivers.filter(d => d.status === 'scheduled').length,
+    offDuty: drivers.filter(d => d.status === 'off_duty').length,
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -242,6 +258,15 @@ export default function DistributorFleetPage() {
       </div>
 
       {/* Stats Cards */}
+      {isLoading ? (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Loader2 className="h-12 w-12 text-gray-300 mx-auto mb-3 animate-spin" />
+            <h3 className="text-lg font-medium text-gray-900">Loading fleet data...</h3>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
@@ -276,7 +301,7 @@ export default function DistributorFleetPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {mockVehicles.reduce((sum, v) => sum + v.deliveriesToday, 0)}
+              {vehicles.reduce((sum, v) => sum + v.deliveriesToday, 0)}
             </div>
             <p className="text-xs text-gray-500 mt-1">All vehicles</p>
           </CardContent>
@@ -521,6 +546,8 @@ export default function DistributorFleetPage() {
           ))}
         </TabsContent>
       </Tabs>
+      </>
+      )}
     </div>
   );
 }

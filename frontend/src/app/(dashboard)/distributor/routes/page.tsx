@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,7 @@ import {
   Pause,
   CheckCircle,
   AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import {
   Select,
@@ -22,133 +24,179 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { auth } from '@/lib/auth';
+import { apiClient } from '@/lib/api-client';
+import { socketClient } from '@/lib/socket-client';
+
+interface Delivery {
+  _id: string;
+  distributorId: string;
+  orderId: string;
+  status: string;
+  route: {
+    pickup: {
+      location: any;
+      scheduledTime: string;
+      actualTime?: string;
+    };
+    delivery: {
+      location: any;
+      scheduledTime: string;
+      actualTime?: string;
+    };
+  };
+  driverName?: string;
+  vehicleId?: string;
+  createdAt: string;
+}
+
+interface Route {
+  id: string;
+  name: string;
+  driver: string;
+  vehicle: string;
+  status: string;
+  startTime: string;
+  estimatedEnd: string;
+  totalDistance: string;
+  totalStops: number;
+  completedStops: number;
+  stops: Array<{
+    id: number;
+    type: string;
+    name: string;
+    address: string;
+    time: string;
+    status: string;
+    items: string[];
+    notes?: string;
+  }>;
+}
 
 export default function RoutesPage() {
-  const [selectedRoute, setSelectedRoute] = useState('ROUTE-301');
+  const router = useRouter();
+  const [selectedRoute, setSelectedRoute] = useState<string>('');
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock routes data
-  const routes = [
-    {
-      id: 'ROUTE-301',
-      name: 'Morning Route A',
-      driver: 'John Smith',
-      vehicle: 'VAN-042',
-      status: 'in_progress',
-      startTime: '8:00 AM',
-      estimatedEnd: '2:30 PM',
-      totalDistance: '45 miles',
-      totalStops: 5,
-      completedStops: 2,
-      stops: [
-        {
-          id: 1,
-          type: 'pickup',
-          name: 'Green Valley Farm',
-          address: '123 Farm Road, Greenville',
-          time: '8:00 AM - 8:30 AM',
-          status: 'completed',
-          items: ['Tomatoes (50 lbs)', 'Lettuce (30 lbs)'],
-          notes: 'Check cold storage temperature',
-        },
-        {
-          id: 2,
-          type: 'delivery',
-          name: 'Fresh Bistro',
-          address: '456 Main St, Downtown',
-          time: '9:00 AM - 9:15 AM',
-          status: 'completed',
-          items: ['Tomatoes (15 lbs)', 'Lettuce (10 lbs)'],
-          notes: 'Back entrance delivery',
-        },
-        {
-          id: 3,
-          type: 'delivery',
-          name: 'Organic Kitchen',
-          address: '789 Oak Avenue, Midtown',
-          time: '10:00 AM - 10:15 AM',
-          status: 'in_progress',
-          items: ['Tomatoes (20 lbs)', 'Lettuce (15 lbs)'],
-          notes: 'Contact manager on arrival',
-        },
-        {
-          id: 4,
-          type: 'delivery',
-          name: 'Downtown Market',
-          address: '321 Market Street, City Center',
-          time: '11:30 AM - 11:45 AM',
-          status: 'pending',
-          items: ['Tomatoes (10 lbs)', 'Lettuce (5 lbs)'],
-          notes: '',
-        },
-        {
-          id: 5,
-          type: 'pickup',
-          name: 'Sunrise Organics',
-          address: '555 Organic Lane, Farmtown',
-          time: '1:00 PM - 1:30 PM',
-          status: 'pending',
-          items: ['Mixed Vegetables (100 lbs)'],
-          notes: 'Refrigerated truck required',
-        },
-      ],
-    },
-    {
-      id: 'ROUTE-302',
-      name: 'Afternoon Route B',
-      driver: 'Sarah Johnson',
-      vehicle: 'TRUCK-015',
-      status: 'scheduled',
-      startTime: '2:00 PM',
-      estimatedEnd: '6:00 PM',
-      totalDistance: '38 miles',
-      totalStops: 4,
-      completedStops: 0,
-      stops: [
-        {
-          id: 1,
-          type: 'pickup',
-          name: 'Harvest Hills',
-          address: '777 Hill Road, Countryside',
-          time: '2:00 PM - 2:30 PM',
-          status: 'pending',
-          items: ['Corn (150 lbs)', 'Potatoes (200 lbs)'],
-          notes: '',
-        },
-        {
-          id: 2,
-          type: 'delivery',
-          name: 'City Grill',
-          address: '888 Restaurant Row, Downtown',
-          time: '3:15 PM - 3:30 PM',
-          status: 'pending',
-          items: ['Corn (50 lbs)', 'Potatoes (75 lbs)'],
-          notes: '',
-        },
-        {
-          id: 3,
-          type: 'delivery',
-          name: 'Fresh Express Market',
-          address: '999 Plaza Drive, Shopping District',
-          time: '4:30 PM - 4:45 PM',
-          status: 'pending',
-          items: ['Corn (100 lbs)', 'Potatoes (125 lbs)'],
-          notes: 'Loading dock access',
-        },
-        {
-          id: 4,
-          type: 'pickup',
-          name: 'Berry Best Farm',
-          address: '222 Berry Lane, Farmland',
-          time: '5:15 PM - 5:45 PM',
-          status: 'pending',
-          items: ['Strawberries (50 lbs)'],
-          notes: 'Handle with care',
-        },
-      ],
-    },
-  ];
+  useEffect(() => {
+    const currentUser = auth.getCurrentUser();
+    if (!currentUser) {
+      router.push('/login');
+      return;
+    }
+    fetchRoutes(currentUser.id);
 
-  const currentRoute = routes.find(r => r.id === selectedRoute) || routes[0];
+    // Listen for real-time updates
+    const handleNotification = (notification: any) => {
+      if (notification.type === 'delivery' || notification.type === 'order') {
+        fetchRoutes(currentUser.id);
+      }
+    };
+
+    socketClient.onNotification(handleNotification);
+
+    return () => {
+      socketClient.offNotification(handleNotification);
+    };
+  }, [router]);
+
+  const fetchRoutes = async (distributorId: string) => {
+    try {
+      setIsLoading(true);
+      const deliveriesResponse: any = await apiClient.getDeliveries({ distributorId, limit: '100' });
+      const deliveries = deliveriesResponse.success ? deliveriesResponse.deliveries || [] : [];
+
+      // Group deliveries by driver/vehicle to create routes
+      const routesMap: { [key: string]: Delivery[] } = {};
+      deliveries.forEach((delivery: Delivery) => {
+        const key = `${delivery.driverName || 'Unassigned'}-${delivery.vehicleId || 'N/A'}`;
+        if (!routesMap[key]) {
+          routesMap[key] = [];
+        }
+        routesMap[key].push(delivery);
+      });
+
+      // Convert to routes format
+      const routesList: Route[] = await Promise.all(
+        Object.entries(routesMap).map(async ([key, routeDeliveries], idx) => {
+          const firstDelivery = routeDeliveries[0];
+          const routeId = `ROUTE-${firstDelivery._id.slice(-3)}`;
+          
+          // Fetch order details for stops
+          const stops: Route['stops'] = [];
+          for (const delivery of routeDeliveries) {
+            try {
+              const orderResponse: any = await apiClient.getOrder(delivery.orderId);
+              if (orderResponse.success && orderResponse.order) {
+                const order = orderResponse.order;
+                // Pickup stop
+                stops.push({
+                  id: stops.length + 1,
+                  type: 'pickup',
+                  name: order.items?.[0]?.farmerName || 'Farm',
+                  address: delivery.route?.pickup?.location?.address || 'Address not available',
+                  time: delivery.route?.pickup?.scheduledTime
+                    ? `${new Date(delivery.route.pickup.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} - ${new Date(new Date(delivery.route.pickup.scheduledTime).getTime() + 30 * 60000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+                    : 'TBD',
+                  status: delivery.status === 'delivered' || delivery.status === 'picked_up' || delivery.status === 'in_transit' ? 'completed' : 'pending',
+                  items: order.items?.map((item: any) => `${item.productName} (${item.quantity} ${item.unit})`) || [],
+                });
+                // Delivery stop
+                stops.push({
+                  id: stops.length + 2,
+                  type: 'delivery',
+                  name: order.shippingAddress?.split(',')[0] || 'Restaurant',
+                  address: delivery.route?.delivery?.location?.address || order.shippingAddress || 'Address not available',
+                  time: delivery.route?.delivery?.scheduledTime
+                    ? `${new Date(delivery.route.delivery.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} - ${new Date(new Date(delivery.route.delivery.scheduledTime).getTime() + 15 * 60000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+                    : 'TBD',
+                  status: delivery.status === 'delivered' ? 'completed' : delivery.status === 'in_transit' ? 'in_progress' : 'pending',
+                  items: order.items?.map((item: any) => `${item.productName} (${item.quantity} ${item.unit})`) || [],
+                });
+              }
+            } catch (err) {
+              // Skip if order not found
+            }
+          }
+
+          const completedStops = stops.filter(s => s.status === 'completed').length;
+          const hasInProgress = routeDeliveries.some(d => d.status === 'picked_up' || d.status === 'in_transit');
+          const allCompleted = routeDeliveries.every(d => d.status === 'delivered');
+
+          return {
+            id: routeId,
+            name: `${firstDelivery.driverName || 'Unassigned'} Route`,
+            driver: firstDelivery.driverName || 'Unassigned',
+            vehicle: firstDelivery.vehicleId || 'N/A',
+            status: allCompleted ? 'completed' : hasInProgress ? 'in_progress' : 'scheduled',
+            startTime: firstDelivery.route?.pickup?.scheduledTime
+              ? new Date(firstDelivery.route.pickup.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+              : 'TBD',
+            estimatedEnd: routeDeliveries[routeDeliveries.length - 1]?.route?.delivery?.scheduledTime
+              ? new Date(routeDeliveries[routeDeliveries.length - 1].route.delivery.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+              : 'TBD',
+            totalDistance: 'N/A', // Would need route calculation
+            totalStops: stops.length,
+            completedStops,
+            stops,
+          };
+        })
+      );
+
+      setRoutes(routesList);
+      if (routesList.length > 0 && !selectedRoute) {
+        setSelectedRoute(routesList[0].id);
+      }
+    } catch (error) {
+      console.error('Error fetching routes:', error);
+      setRoutes([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const currentRoute = routes.find(r => r.id === selectedRoute) || routes[0] || null;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -195,35 +243,57 @@ export default function RoutesPage() {
         {/* Route Selector */}
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <Select value={selectedRoute} onValueChange={setSelectedRoute}>
-                <SelectTrigger className="w-full sm:w-64">
-                  <SelectValue placeholder="Select Route" />
-                </SelectTrigger>
-                <SelectContent>
-                  {routes.map((route) => (
-                    <SelectItem key={route.id} value={route.id}>
-                      {route.name} - {route.driver}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Badge className={getStatusColor(currentRoute.status)} variant="secondary">
-                {currentRoute.status.replace('_', ' ')}
-              </Badge>
-            </div>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                <span className="ml-2 text-gray-600">Loading routes...</span>
+              </div>
+            ) : routes.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">No routes available</p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4">
+                <Select value={selectedRoute} onValueChange={setSelectedRoute}>
+                  <SelectTrigger className="w-full sm:w-64">
+                    <SelectValue placeholder="Select Route" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {routes.map((route) => (
+                      <SelectItem key={route.id} value={route.id}>
+                        {route.name} - {route.driver}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {currentRoute && (
+                  <Badge className={getStatusColor(currentRoute.status)} variant="secondary">
+                    {currentRoute.status.replace('_', ' ')}
+                  </Badge>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Route Overview */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Route Stats */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Route Overview</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+        {!currentRoute ? (
+          <Card>
+            <CardContent className="text-center py-12">
+              <Truck className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+              <h3 className="text-lg font-medium text-gray-900">No route selected</h3>
+              <p className="text-gray-500 mt-1">Select a route from the dropdown above</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Route Overview */}
+            <div className="lg:col-span-1 space-y-6">
+              {/* Route Stats */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Route Overview</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Truck className="h-4 w-4 text-gray-500" />
@@ -430,6 +500,7 @@ export default function RoutesPage() {
             </Card>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
