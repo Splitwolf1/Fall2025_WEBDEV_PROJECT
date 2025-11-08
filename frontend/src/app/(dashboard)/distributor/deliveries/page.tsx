@@ -295,12 +295,34 @@ export default function DistributorDeliveriesPage() {
               const isInProgress = delivery.status === 'picked_up' || delivery.status === 'in_transit';
               const isCompleted = delivery.status === 'delivered';
               
-              // Calculate progress
+              // Calculate progress based on status
               let progress = 0;
-              if (isCompleted) {
+              if (delivery.status === 'delivered') {
                 progress = 100;
-              } else if (isInProgress) {
+              } else if (delivery.status === 'in_transit') {
+                progress = 75;
+              } else if (delivery.status === 'picked_up') {
                 progress = 50;
+              } else if (delivery.status === 'scheduled') {
+                progress = 25;
+              }
+              
+              // Determine stop statuses based on delivery status
+              let pickupStatus: 'completed' | 'in_progress' | 'pending' = 'pending';
+              let deliveryStatus: 'completed' | 'in_progress' | 'pending' = 'pending';
+              
+              if (delivery.status === 'delivered') {
+                pickupStatus = 'completed';
+                deliveryStatus = 'completed';
+              } else if (delivery.status === 'in_transit') {
+                pickupStatus = 'completed';
+                deliveryStatus = 'in_progress';
+              } else if (delivery.status === 'picked_up') {
+                pickupStatus = 'in_progress';
+                deliveryStatus = 'pending';
+              } else {
+                pickupStatus = 'pending';
+                deliveryStatus = 'pending';
               }
               
               // Get stops (pickup and delivery)
@@ -308,16 +330,20 @@ export default function DistributorDeliveriesPage() {
                 {
                   name: order?.items?.[0]?.farmerName || 'Farm',
                   type: 'pickup',
-                  status: delivery.status === 'delivered' || isInProgress ? 'completed' : 'pending',
-                  time: delivery.route?.pickup?.scheduledTime
+                  status: pickupStatus,
+                  time: delivery.route?.pickup?.actualTime
+                    ? new Date(delivery.route.pickup.actualTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                    : delivery.route?.pickup?.scheduledTime
                     ? new Date(delivery.route.pickup.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
                     : 'TBD',
                 },
                 {
                   name: order?.shippingAddress?.split(',')[0] || 'Restaurant',
                   type: 'delivery',
-                  status: isCompleted ? 'completed' : isInProgress ? 'in_progress' : 'pending',
-                  time: delivery.route?.delivery?.scheduledTime
+                  status: deliveryStatus,
+                  time: delivery.route?.delivery?.actualTime
+                    ? new Date(delivery.route.delivery.actualTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                    : delivery.route?.delivery?.scheduledTime
                     ? new Date(delivery.route.delivery.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
                     : 'TBD',
                 },
@@ -469,10 +495,64 @@ export default function DistributorDeliveriesPage() {
                                 <p className="text-sm text-gray-500">{stop.time}</p>
                               </div>
                             </div>
-                            {stop.status === 'in_progress' && (
-                              <Button size="sm">
+                            {stop.status === 'in_progress' && stop.type === 'pickup' && delivery.status === 'picked_up' && (
+                              <Button 
+                                size="sm"
+                                onClick={async () => {
+                                  try {
+                                    const response: any = await apiClient.updateDeliveryStatus(
+                                      delivery._id,
+                                      'in_transit',
+                                      'Pickup confirmed - order picked up from farm, en route to restaurant'
+                                    );
+                                    
+                                    if (response.success) {
+                                      // Refresh deliveries
+                                      const currentUser = auth.getCurrentUser();
+                                      if (currentUser) {
+                                        await fetchDeliveries(currentUser.id);
+                                      }
+                                    } else {
+                                      alert('Failed to confirm pickup. Please try again.');
+                                    }
+                                  } catch (error: any) {
+                                    console.error('Error confirming pickup:', error);
+                                    alert(error.message || 'Failed to confirm pickup');
+                                  }
+                                }}
+                              >
                                 <CheckCircle className="h-4 w-4 mr-2" />
-                                Complete Stop
+                                Confirm Pickup
+                              </Button>
+                            )}
+                            {stop.status === 'in_progress' && stop.type === 'delivery' && delivery.status === 'in_transit' && (
+                              <Button 
+                                size="sm"
+                                onClick={async () => {
+                                  try {
+                                    const response: any = await apiClient.updateDeliveryStatus(
+                                      delivery._id,
+                                      'delivered',
+                                      'Delivery completed - order delivered to restaurant'
+                                    );
+                                    
+                                    if (response.success) {
+                                      // Refresh deliveries
+                                      const currentUser = auth.getCurrentUser();
+                                      if (currentUser) {
+                                        await fetchDeliveries(currentUser.id);
+                                      }
+                                    } else {
+                                      alert('Failed to complete delivery. Please try again.');
+                                    }
+                                  } catch (error: any) {
+                                    console.error('Error completing delivery:', error);
+                                    alert(error.message || 'Failed to complete delivery');
+                                  }
+                                }}
+                              >
+                                <CheckCircle className="h-4 w-4 mr-2" />
+                                Complete Delivery
                               </Button>
                             )}
                           </div>

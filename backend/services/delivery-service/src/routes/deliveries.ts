@@ -247,19 +247,70 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     });
 
     // Update actual times
-    if (status === DeliveryStatus.PICKED_UP && !delivery.route.pickup.actualTime) {
+    // When status changes to in_transit, pickup is confirmed (picked up from farm)
+    if (status === DeliveryStatus.IN_TRANSIT && !delivery.route.pickup.actualTime) {
       delivery.route.pickup.actualTime = new Date();
     }
+    // When status changes to delivered, delivery is completed
     if (status === DeliveryStatus.DELIVERED && !delivery.route.delivery.actualTime) {
       delivery.route.delivery.actualTime = new Date();
     }
 
     await delivery.save();
 
-    // Emit WebSocket notification for delivery status update
+    // Fetch order details to get farmerId and customerId for notifications
+    let farmerId: string | null = null;
+    let customerId: string | null = null;
     try {
-      const notificationServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:3006';
-      await axios.post(`${notificationServiceUrl}/notify/role/distributor`, {
+      const orderServiceUrl = process.env.ORDER_SERVICE_URL || 'http://order-service:3003';
+      const orderResponse = await axios.get(`${orderServiceUrl}/api/orders/${delivery.orderId}`, {
+        timeout: 3000,
+      }).catch(() => null);
+      
+      if (orderResponse?.data?.success && orderResponse.data.order) {
+        farmerId = orderResponse.data.order.farmerId?.toString() || null;
+        customerId = orderResponse.data.order.customerId?.toString() || null;
+        console.log(`[Delivery-Service] Found order: farmerId=${farmerId}, customerId=${customerId}`);
+      }
+    } catch (err) {
+      console.warn('[Delivery-Service] Failed to fetch order details:', err);
+    }
+
+    // Update order status based on delivery status
+    try {
+      const orderServiceUrl = process.env.ORDER_SERVICE_URL || 'http://order-service:3003';
+      let orderStatus: string | null = null;
+      
+      if (status === 'picked_up') {
+        orderStatus = 'in_transit';
+      } else if (status === 'in_transit') {
+        orderStatus = 'in_transit';
+      } else if (status === 'delivered') {
+        orderStatus = 'delivered';
+      }
+      
+      if (orderStatus) {
+        await axios.patch(`${orderServiceUrl}/api/orders/${delivery.orderId}/status`, {
+          status: orderStatus,
+          note: `Delivery status: ${status}`,
+        }, {
+          timeout: 3000,
+          headers: { 'Content-Type': 'application/json' },
+        }).catch((err) => {
+          console.warn('[Delivery-Service] Failed to update order status:', err.message);
+        });
+      }
+    } catch (error: any) {
+      console.warn('[Delivery-Service] Order service unavailable (non-critical):', error.message);
+    }
+
+    // Emit WebSocket notifications for delivery status update
+    const notificationServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:3006';
+    const notificationPromises = [];
+
+    // Notify distributor
+    notificationPromises.push(
+      axios.post(`${notificationServiceUrl}/notify/role/distributor`, {
         type: 'delivery',
         title: 'Delivery Status Updated',
         message: `Delivery ${delivery.orderNumber} status changed to ${status}`,
@@ -273,11 +324,72 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
         timeout: 2000,
         headers: { 'Content-Type': 'application/json' },
       }).catch((err) => {
-        console.warn('Failed to send notification (non-critical):', err.message);
-      });
-    } catch (error: any) {
-      console.warn('Notification service unavailable (non-critical):', error.message);
+        console.warn('[Delivery-Service] Failed to notify distributor:', err.message);
+      })
+    );
+
+    // Notify farmer (if farmerId is available)
+    if (farmerId) {
+      const farmerMessage = status === 'picked_up' 
+        ? `Your order ${delivery.orderNumber} has been picked up from your farm`
+        : status === 'in_transit'
+        ? `Order ${delivery.orderNumber} is in transit to the restaurant`
+        : status === 'delivered'
+        ? `Order ${delivery.orderNumber} has been delivered to the restaurant`
+        : `Delivery ${delivery.orderNumber} status changed to ${status}`;
+        
+      notificationPromises.push(
+        axios.post(`${notificationServiceUrl}/notify/user/${farmerId}`, {
+          type: 'delivery',
+          title: 'Delivery Update',
+          message: farmerMessage,
+          data: {
+            deliveryId: delivery._id.toString(),
+            orderId: delivery.orderId.toString(),
+            orderNumber: delivery.orderNumber,
+            status: status,
+          },
+        }, {
+          timeout: 2000,
+          headers: { 'Content-Type': 'application/json' },
+        }).catch((err) => {
+          console.warn('[Delivery-Service] Failed to notify farmer:', err.message);
+        })
+      );
     }
+
+    // Notify restaurant (if customerId is available)
+    if (customerId) {
+      const restaurantMessage = status === 'picked_up'
+        ? `Order ${delivery.orderNumber} has been picked up from the farm`
+        : status === 'in_transit'
+        ? `Order ${delivery.orderNumber} is on the way to your restaurant`
+        : status === 'delivered'
+        ? `Order ${delivery.orderNumber} has been delivered to your restaurant`
+        : `Delivery ${delivery.orderNumber} status changed to ${status}`;
+        
+      notificationPromises.push(
+        axios.post(`${notificationServiceUrl}/notify/user/${customerId}`, {
+          type: 'delivery',
+          title: 'Delivery Update',
+          message: restaurantMessage,
+          data: {
+            deliveryId: delivery._id.toString(),
+            orderId: delivery.orderId.toString(),
+            orderNumber: delivery.orderNumber,
+            status: status,
+          },
+        }, {
+          timeout: 2000,
+          headers: { 'Content-Type': 'application/json' },
+        }).catch((err) => {
+          console.warn('[Delivery-Service] Failed to notify restaurant:', err.message);
+        })
+      );
+    }
+
+    // Send all notifications in parallel
+    await Promise.all(notificationPromises);
 
     res.json({
       success: true,

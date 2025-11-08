@@ -110,9 +110,15 @@ export default function NotificationDropdown() {
               </p>
             </div>
           ) : (
-            notifications.map((notification) => (
+            notifications.map((notification, index) => {
+              // Ensure unique key: use _id if available, otherwise combine index with createdAt
+              const uniqueKey = notification._id 
+                ? `${notification._id}-${index}` 
+                : `notification-${index}-${notification.createdAt || Date.now()}-${notification.title || ''}`;
+              
+              return (
               <div
-                key={notification._id}
+                key={uniqueKey}
                 className={`p-3 hover:bg-gray-50 cursor-pointer transition-colors ${
                   !notification.isRead ? 'bg-blue-50' : ''
                 }`}
@@ -160,7 +166,8 @@ export default function NotificationDropdown() {
                   </div>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
         {notifications.length > 0 && (
