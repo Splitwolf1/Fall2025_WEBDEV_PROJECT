@@ -1,0 +1,256 @@
+services:
+  # Message Broker
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: farm2table-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"  # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: farm2table
+      RABBITMQ_DEFAULT_PASS: secret
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - farm2table-network
+
+  # Service Discovery
+  consul:
+    image: hashicorp/consul:latest
+    container_name: farm2table-consul
+    ports:
+      - "8500:8500"
+      - "8600:8600"
+    command: agent -server -ui -bootstrap-expect=1 -client=0.0.0.0
+    networks:
+      - farm2table-network
+
+  # Databases (one per service)
+  mongo-users:
+    image: mongo:7
+    container_name: farm2table-mongo-users
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_users_data:/data/db
+    networks:
+      - farm2table-network
+
+  mongo-products:
+    image: mongo:7
+    container_name: farm2table-mongo-products
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_products_data:/data/db
+    networks:
+      - farm2table-network
+
+  mongo-orders:
+    image: mongo:7
+    container_name: farm2table-mongo-orders
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongo_orders_data:/data/db
+    networks:
+      - farm2table-network
+
+  mongo-deliveries:
+    image: mongo:7
+    container_name: farm2table-mongo-deliveries
+    ports:
+      - "27020:27017"
+    volumes:
+      - mongo_deliveries_data:/data/db
+    networks:
+      - farm2table-network
+
+  mongo-health:
+    image: mongo:7
+    container_name: farm2table-mongo-health
+    ports:
+      - "27021:27017"
+    volumes:
+      - mongo_health_data:/data/db
+    networks:
+      - farm2table-network
+
+  # API Gateway
+  api-gateway:
+    build: ./api-gateway
+    container_name: farm2table-api-gateway
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+      - JWT_SECRET=your-secret-key-change-in-production
+    depends_on:
+      - consul
+      - rabbitmq
+    networks:
+      - farm2table-network
+    volumes:
+      - ./api-gateway:/app
+      - /app/node_modules
+
+  # Microservices
+  user-service:
+    build: ./services/user-service
+    container_name: farm2table-user-service
+    ports:
+      - "3001:3001"
+    environment:
+      - SERVICE_NAME=user-service
+      - PORT=3001
+      - MONGO_URI=mongodb://mongo-users:27017/users
+      - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - JWT_SECRET=your-secret-key-change-in-production
+    depends_on:
+      - mongo-users
+      - rabbitmq
+      - consul
+    networks:
+      - farm2table-network
+    volumes:
+      - ./services/user-service:/app
+      - /app/node_modules
+
+  product-service:
+    build: ./services/product-service
+    container_name: farm2table-product-service
+    ports:
+      - "3002:3002"
+    environment:
+      - SERVICE_NAME=product-service
+      - PORT=3002
+      - MONGO_URI=mongodb://mongo-products:27017/products
+      - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
+      - CONSUL_HOST=consul
+    depends_on:
+      - mongo-products
+      - rabbitmq
+      - consul
+    networks:
+      - farm2table-network
+    volumes:
+      - ./services/product-service:/app
+      - /app/node_modules
+
+  order-service:
+    build: ./services/order-service
+    container_name: farm2table-order-service
+    ports:
+      - "3003:3003"
+    environment:
+      - SERVICE_NAME=order-service
+      - PORT=3003
+      - MONGO_URI=mongodb://mongo-orders:27017/orders
+      - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
+      - CONSUL_HOST=consul
+    depends_on:
+      - mongo-orders
+      - rabbitmq
+      - consul
+    networks:
+      - farm2table-network
+    volumes:
+      - ./services/order-service:/app
+      - /app/node_modules
+
+  delivery-service:
+    build: ./services/delivery-service
+    container_name: farm2table-delivery-service
+    ports:
+      - "3004:3004"
+    environment:
+      - SERVICE_NAME=delivery-service
+      - PORT=3004
+      - MONGO_URI=mongodb://mongo-deliveries:27017/deliveries
+      - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
+      - CONSUL_HOST=consul
+    depends_on:
+      - mongo-deliveries
+      - rabbitmq
+      - consul
+    networks:
+      - farm2table-network
+    volumes:
+      - ./services/delivery-service:/app
+      - /app/node_modules
+
+  health-service:
+    build: ./services/health-service
+    container_name: farm2table-health-service
+    ports:
+      - "3005:3005"
+    environment:
+      - SERVICE_NAME=health-service
+      - PORT=3005
+      - MONGO_URI=mongodb://mongo-health:27017/health
+      - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
+      - CONSUL_HOST=consul
+    depends_on:
+      - mongo-health
+      - rabbitmq
+      - consul
+    networks:
+      - farm2table-network
+    volumes:
+      - ./services/health-service:/app
+      - /app/node_modules
+
+  notification-service:
+    build: ./services/notification-service
+    container_name: farm2table-notification-service
+    ports:
+      - "3006:3006"
+    environment:
+      - SERVICE_NAME=notification-service
+      - PORT=3006
+      - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - SOCKETIO_PORT=3006
+    depends_on:
+      - rabbitmq
+      - consul
+    networks:
+      - farm2table-network
+    volumes:
+      - ./services/notification-service:/app
+      - /app/node_modules
+
+  chatbot-service:
+    build: ./services/chatbot-service
+    container_name: farm2table-chatbot-service
+    ports:
+      - "3007:3007"
+    environment:
+      - SERVICE_NAME=chatbot-service
+      - PORT=3007
+      - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
+      - CONSUL_HOST=consul
+    depends_on:
+      - rabbitmq
+      - consul
+    networks:
+      - farm2table-network
+    volumes:
+      - ./services/chatbot-service:/app
+      - /app/node_modules
+
+volumes:
+  rabbitmq_data:
+  mongo_users_data:
+  mongo_products_data:
+  mongo_orders_data:
+  mongo_deliveries_data:
+  mongo_health_data:
+
+networks:
+  farm2table-network:
+    driver: bridge

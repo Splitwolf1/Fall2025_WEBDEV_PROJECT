@@ -1,0 +1,78 @@
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import deliveryRoutes from './routes/deliveries';
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3004;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Routes
+app.use('/api/deliveries', deliveryRoutes);
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'delivery-service',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    service: 'delivery-service',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      deliveries: '/api/deliveries',
+    },
+  });
+});
+
+// Connect to MongoDB
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/deliveries');
+    console.log('✅ MongoDB connected');
+  } catch (error) {
+    console.error('❌ MongoDB connection error:', error);
+    process.exit(1);
+  }
+};
+
+// Start server
+const startServer = async () => {
+  try {
+    await connectDB();
+
+    app.listen(PORT, () => {
+      console.log(`🚀 Delivery Service running on port ${PORT}`);
+      console.log(`📍 Health check: http://localhost:${PORT}/health`);
+    });
+
+    // TODO: Connect to RabbitMQ
+    // TODO: Register with Consul
+    // TODO: Setup Socket.io for real-time tracking
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n⚠️ Shutting down gracefully...');
+  await mongoose.disconnect();
+  process.exit(0);
+});
