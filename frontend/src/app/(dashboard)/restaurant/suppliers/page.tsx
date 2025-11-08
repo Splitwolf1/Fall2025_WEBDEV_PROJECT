@@ -163,6 +163,8 @@ export default function RestaurantSuppliersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [supplierProducts, setSupplierProducts] = useState<any[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -174,68 +176,79 @@ export default function RestaurantSuppliersPage() {
       router.push('/login');
       return;
     }
+    
+    // Load favorites from localStorage
+    const savedFavorites = localStorage.getItem('restaurant-favorite-suppliers');
+    if (savedFavorites) {
+      try {
+        setFavorites(new Set(JSON.parse(savedFavorites)));
+      } catch (e) {
+        console.warn('Failed to load favorites from localStorage');
+      }
+    }
+    
     fetchSuppliers(currentUser.id);
   }, [router]);
 
-  const fetchSuppliers = async (customerId: string) => {
+  const fetchSuppliers = async (restaurantId: string) => {
     try {
       setIsLoading(true);
       setError('');
 
-      // Fetch orders to get suppliers (farmers)
-      const ordersResponse: any = await apiClient.getOrders({ customerId });
+      // Fetch ALL farmers (suppliers)
+      const farmersResponse: any = await apiClient.getUsersByRole('farmer');
+      const farmers = farmersResponse.success ? farmersResponse.users || [] : [];
+
+      // Fetch orders to calculate stats for farmers this restaurant has ordered from
+      const ordersResponse: any = await apiClient.getOrders({ customerId: restaurantId });
       const orders = ordersResponse.success ? ordersResponse.orders || [] : [];
 
-      // Group orders by farmer/supplier
-      const supplierData: { [key: string]: {
-        farmerId: string;
-        farmerName: string;
+      // Group orders by farmer to calculate stats
+      const orderStatsByFarmer: { [key: string]: {
         orders: any[];
-        products: Set<string>;
         totalSpent: number;
-        lastOrder: Date;
-        firstOrder: Date;
+        lastOrder: Date | null;
+        productNames: Set<string>;
       } } = {};
 
       orders.forEach((order: any) => {
         order.items?.forEach((item: any) => {
           if (item.farmerId) {
-            if (!supplierData[item.farmerId]) {
-              supplierData[item.farmerId] = {
-                farmerId: item.farmerId,
-                farmerName: item.farmerName || `Supplier ${item.farmerId.slice(-4)}`,
+            if (!orderStatsByFarmer[item.farmerId]) {
+              orderStatsByFarmer[item.farmerId] = {
                 orders: [],
-                products: new Set(),
                 totalSpent: 0,
-                lastOrder: new Date(order.createdAt),
-                firstOrder: new Date(order.createdAt),
+                lastOrder: null,
+                productNames: new Set(),
               };
             }
-            supplierData[item.farmerId].orders.push(order);
-            supplierData[item.farmerId].products.add(item.productName);
-            supplierData[item.farmerId].totalSpent += item.totalPrice || 0;
+            orderStatsByFarmer[item.farmerId].orders.push(order);
+            orderStatsByFarmer[item.farmerId].productNames.add(item.productName || '');
+            orderStatsByFarmer[item.farmerId].totalSpent += item.totalPrice || 0;
             
             const orderDate = new Date(order.createdAt);
-            if (orderDate > supplierData[item.farmerId].lastOrder) {
-              supplierData[item.farmerId].lastOrder = orderDate;
-            }
-            if (orderDate < supplierData[item.farmerId].firstOrder) {
-              supplierData[item.farmerId].firstOrder = orderDate;
+            if (!orderStatsByFarmer[item.farmerId].lastOrder || orderDate > orderStatsByFarmer[item.farmerId].lastOrder!) {
+              orderStatsByFarmer[item.farmerId].lastOrder = orderDate;
             }
           }
         });
       });
 
-      // Fetch products to get supplier details and ratings
-      const productsResponse: any = await apiClient.getProducts({ limit: '100' });
-      const products = productsResponse.success ? productsResponse.products || [] : [];
+      // Fetch all products to get ratings and product lists
+      const productsResponse: any = await apiClient.getProducts({ limit: '500' });
+      const allProducts = productsResponse.success ? productsResponse.products || [] : [];
 
-      // Build supplier list with calculated stats
+      // Build supplier list from all farmers
       const suppliersList: Supplier[] = [];
       
-      for (const [farmerId, data] of Object.entries(supplierData)) {
-        // Get farmer's products
-        const farmerProducts = products.filter((p: any) => p.farmerId === farmerId);
+      for (const farmer of farmers) {
+        const farmerId = farmer.id || farmer._id;
+        
+        // Get all products from this farmer
+        const farmerProducts = allProducts.filter((p: any) => {
+          const pFarmerId = p.farmerId?._id || p.farmerId?.id || p.farmerId;
+          return pFarmerId === farmerId || pFarmerId?.toString() === farmerId?.toString();
+        });
         
         // Calculate average rating from products
         let totalRating = 0;
@@ -248,12 +261,20 @@ export default function RestaurantSuppliersPage() {
         });
         const avgRating = totalRatingCount > 0 ? totalRating / totalRatingCount : 0;
 
-        // Calculate average delivery time
-        const deliveredOrders = data.orders.filter((o: any) => o.status === 'delivered' || o.status === 'completed');
+        // Get order stats if restaurant has ordered from this farmer
+        const stats = orderStatsByFarmer[farmerId] || {
+          orders: [],
+          totalSpent: 0,
+          lastOrder: null,
+          productNames: new Set(),
+        };
+
+        // Calculate average delivery time from orders
+        const deliveredOrders = stats.orders.filter((o: any) => o.status === 'delivered' || o.status === 'completed');
         let avgDeliveryDays = 0;
         let deliveryCount = 0;
         
-        for (const order of deliveredOrders.slice(0, 10)) { // Limit to avoid too many API calls
+        for (const order of deliveredOrders.slice(0, 10)) {
           try {
             const deliveryResponse: any = await apiClient.getDeliveries({ orderId: order._id });
             if (deliveryResponse.success && deliveryResponse.deliveries && deliveryResponse.deliveries.length > 0) {
@@ -283,45 +304,60 @@ export default function RestaurantSuppliersPage() {
               : `${(avgDeliveryDays / deliveryCount).toFixed(1)} days`)
           : 'N/A';
 
-        // Calculate on-time rate (simplified - assuming 2 days is standard)
-        let onTimeCount = 0;
-        for (let i = 0; i < Math.min(deliveryCount, 10); i++) {
-          if (avgDeliveryDays / deliveryCount <= 2) {
-            onTimeCount++;
-          }
-        }
-        const onTimeRate = deliveryCount > 0 ? Math.round((onTimeCount / deliveryCount) * 100) : 0;
+        // Calculate on-time rate
+        const onTimeRate = deliveryCount > 0 
+          ? Math.round((deliveredOrders.filter(() => avgDeliveryDays / deliveryCount <= 2).length / deliveryCount) * 100)
+          : 0;
 
-        // Get certifications from farmer details (if available)
-        const certifications: string[] = [];
-        // Would need to fetch farmer profile for actual certifications
+        // Get farmer details
+        const farmName = farmer.farmDetails?.farmName || `${farmer.profile?.firstName || ''} ${farmer.profile?.lastName || ''}`.trim() || `Farm ${farmerId.slice(-4)}`;
+        const location = farmer.farmDetails?.address || 'Location not available';
+        const certifications = farmer.farmDetails?.certifications || [];
+        const phone = farmer.profile?.phone || 'N/A';
+        const email = farmer.email || 'N/A';
+
+        // Get product names (from products or order history)
+        const productNames = farmerProducts.length > 0
+          ? farmerProducts.slice(0, 4).map((p: any) => p.name)
+          : Array.from(stats.productNames).slice(0, 4);
 
         suppliersList.push({
           id: farmerId,
-          name: data.farmerName,
-          location: 'Location not available', // Would need farmer profile
-          distance: 'N/A',
+          name: farmName,
+          location,
+          distance: 'N/A', // Could calculate if we have restaurant location
           rating: avgRating,
           reviews: totalRatingCount,
-          totalOrders: data.orders.length,
-          totalSpent: data.totalSpent,
-          avgDeliveryTime,
-          products: Array.from(data.products).slice(0, 4),
+          totalOrders: stats.orders.length,
+          totalSpent: stats.totalSpent,
+          avgDeliveryTime: stats.orders.length > 0 ? avgDeliveryTime : 'N/A',
+          products: productNames,
           certifications,
-          onTime: onTimeRate,
+          onTime: stats.orders.length > 0 ? onTimeRate : 0,
           qualityScore: avgRating > 0 ? avgRating : 0,
           contact: {
-            phone: '(555) 000-0000', // Would need farmer profile
-            email: `supplier${farmerId.slice(-4)}@example.com`, // Would need farmer profile
+            phone,
+            email,
           },
-          isFavorite: false,
-          lastOrder: data.lastOrder.toISOString().split('T')[0],
+          isFavorite: favorites.has(farmerId),
+          lastOrder: stats.lastOrder ? stats.lastOrder.toISOString().split('T')[0] : 'Never',
         });
       }
 
-      setSuppliers(suppliersList.sort((a, b) => b.totalOrders - a.totalOrders));
+      // Sort: favorites first, then by total orders (if ordered from), then alphabetically
+      suppliersList.sort((a, b) => {
+        const aFav = favorites.has(a.id);
+        const bFav = favorites.has(b.id);
+        if (aFav && !bFav) return -1;
+        if (!aFav && bFav) return 1;
+        if (a.totalOrders !== b.totalOrders) return b.totalOrders - a.totalOrders;
+        return a.name.localeCompare(b.name);
+      });
+
+      setSuppliers(suppliersList);
     } catch (err: any) {
-      setError('Failed to load suppliers');
+      console.error('Error fetching suppliers:', err);
+      setError(err.message || 'Failed to load suppliers');
       setSuppliers([]);
     } finally {
       setIsLoading(false);
@@ -347,13 +383,40 @@ export default function RestaurantSuppliersPage() {
       } else {
         newFavorites.add(supplierId);
       }
+      
+      // Persist to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('restaurant-favorite-suppliers', JSON.stringify(Array.from(newFavorites)));
+      }
+      
+      // Update supplier's favorite status
+      setSuppliers(prev => prev.map(s => 
+        s.id === supplierId ? { ...s, isFavorite: newFavorites.has(supplierId) } : s
+      ));
+      
       return newFavorites;
     });
   };
 
-  const handleViewSupplier = (supplier: Supplier) => {
+  const handleViewSupplier = async (supplier: Supplier) => {
     setSelectedSupplier(supplier);
     setShowDetailDialog(true);
+    
+    // Fetch all products from this supplier
+    setIsLoadingProducts(true);
+    try {
+      const productsResponse: any = await apiClient.getProducts({ farmerId: supplier.id });
+      if (productsResponse.success) {
+        setSupplierProducts(productsResponse.products || []);
+      } else {
+        setSupplierProducts([]);
+      }
+    } catch (err) {
+      console.error('Error fetching supplier products:', err);
+      setSupplierProducts([]);
+    } finally {
+      setIsLoadingProducts(false);
+    }
   };
 
   const renderSupplierCard = (supplier: Supplier) => (
@@ -617,14 +680,51 @@ export default function RestaurantSuppliersPage() {
 
               {/* Products */}
               <div>
-                <h4 className="font-medium text-gray-900 mb-2">Products Available</h4>
-                <div className="flex flex-wrap gap-2">
-                  {selectedSupplier.products.map((product, idx) => (
-                    <Badge key={idx} variant="outline">
-                      {product}
-                    </Badge>
-                  ))}
-                </div>
+                <h4 className="font-medium text-gray-900 mb-2">
+                  Products Available {supplierProducts.length > 0 && `(${supplierProducts.length})`}
+                </h4>
+                {isLoadingProducts ? (
+                  <div className="flex items-center gap-2 py-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-green-600" />
+                    <span className="text-sm text-gray-600">Loading products...</span>
+                  </div>
+                ) : supplierProducts.length === 0 ? (
+                  <div className="text-sm text-gray-500 py-2">
+                    {selectedSupplier.products.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedSupplier.products.map((product, idx) => (
+                          <Badge key={idx} variant="outline">
+                            {product}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      'No products available'
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {supplierProducts.map((product: any) => (
+                      <div key={product._id || product.id} className="flex items-center justify-between p-2 border rounded-lg hover:bg-gray-50">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">{product.name}</div>
+                          <div className="text-xs text-gray-500">
+                            {product.category} • ${product.price?.toFixed(2) || '0.00'} / {product.unit || 'unit'}
+                            {product.stockQuantity !== undefined && (
+                              <span className="ml-2">• Stock: {product.stockQuantity}</span>
+                            )}
+                          </div>
+                        </div>
+                        {product.rating?.average && (
+                          <div className="flex items-center gap-1 ml-2">
+                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                            <span className="text-xs font-medium">{product.rating.average.toFixed(1)}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Certifications */}
@@ -670,10 +770,18 @@ export default function RestaurantSuppliersPage() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>Close</Button>
-            <Button onClick={() => setShowDetailDialog(false)}>
+            <Button variant="outline" onClick={() => {
+              setShowDetailDialog(false);
+              setSupplierProducts([]);
+            }}>Close</Button>
+            <Button onClick={() => {
+              setShowDetailDialog(false);
+              setSupplierProducts([]);
+              // Navigate to browse page filtered by this supplier
+              router.push(`/restaurant/browse?supplier=${selectedSupplier?.id}`);
+            }}>
               <Package className="h-4 w-4 mr-2" />
-              Order from {selectedSupplier?.name.split(' ')[0]}
+              View All Products
             </Button>
           </DialogFooter>
         </DialogContent>

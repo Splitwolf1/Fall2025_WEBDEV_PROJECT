@@ -33,12 +33,14 @@ interface Order {
   customerType: string;
   items: Array<{
     productId: string;
-    farmerId: string;
-    productName: string;
+    farmerId?: string;
+    productName?: string;
+    name?: string; // Backend uses 'name'
     quantity: number;
     unit: string;
     pricePerUnit: number;
-    totalPrice: number;
+    totalPrice?: number; // Legacy field
+    subtotal: number; // Backend uses 'subtotal'
   }>;
   totalAmount: number;
   status: string;
@@ -407,15 +409,19 @@ export default function RestaurantOrdersPage() {
               <div>
                 <label className="text-sm font-medium text-gray-700">Order Items</label>
                 <div className="mt-2 border rounded-lg divide-y">
-                  {selectedOrder.items.map((item, idx) => (
-                    <div key={idx} className="p-3 flex justify-between items-center">
-                      <div>
-                        <p className="font-medium">{item.productName}</p>
-                        <p className="text-sm text-gray-500">{item.quantity} {item.unit} @ ${item.pricePerUnit}/{item.unit}</p>
+                  {selectedOrder.items.map((item, idx) => {
+                    const itemName = item.productName || item.name || 'Product';
+                    const itemPrice = item.subtotal || item.totalPrice || (item.pricePerUnit * item.quantity);
+                    return (
+                      <div key={idx} className="p-3 flex justify-between items-center">
+                        <div>
+                          <p className="font-medium">{itemName}</p>
+                          <p className="text-sm text-gray-500">{item.quantity} {item.unit} @ ${item.pricePerUnit?.toFixed(2) || '0.00'}/{item.unit}</p>
+                        </div>
+                        <p className="font-semibold">${itemPrice.toFixed(2)}</p>
                       </div>
-                      <p className="font-semibold">${item.totalPrice.toFixed(2)}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                   <div className="p-3 flex justify-between font-semibold text-lg bg-gray-50">
                     <span>Total</span>
                     <span>${selectedOrder.totalAmount.toFixed(2)}</span>

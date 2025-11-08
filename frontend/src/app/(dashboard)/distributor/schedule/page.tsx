@@ -67,6 +67,8 @@ export default function DistributorSchedulePage() {
   const [selectedSchedule, setSelectedSchedule] = useState<ScheduleItem | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [drivers, setDrivers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -94,8 +96,21 @@ export default function DistributorSchedulePage() {
   const fetchSchedule = async (distributorId: string) => {
     try {
       setIsLoading(true);
-      const deliveriesResponse: any = await apiClient.getDeliveries({ distributorId, limit: '100' });
+      
+      // Fetch deliveries, vehicles, and drivers
+      const [deliveriesResponse, vehiclesResponse, driversResponse] = await Promise.all([
+        apiClient.getDeliveries({ distributorId, limit: '100' }),
+        apiClient.getVehicles(distributorId),
+        apiClient.getDrivers(distributorId),
+      ]);
+      
       const deliveries = deliveriesResponse.success ? deliveriesResponse.deliveries || [] : [];
+      if (vehiclesResponse.success) {
+        setVehicles(vehiclesResponse.vehicles || []);
+      }
+      if (driversResponse.success) {
+        setDrivers(driversResponse.drivers || []);
+      }
 
       // Convert deliveries to schedule items
       const scheduleList: ScheduleItem[] = [];
@@ -435,10 +450,14 @@ export default function DistributorSchedulePage() {
                   <SelectValue placeholder="Select driver" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="john">John Smith</SelectItem>
-                  <SelectItem value="sarah">Sarah Johnson</SelectItem>
-                  <SelectItem value="mike">Mike Davis</SelectItem>
-                  <SelectItem value="lisa">Lisa Brown</SelectItem>
+                  {drivers.map((driver) => (
+                    <SelectItem key={driver._id} value={driver._id}>
+                      {driver.name}
+                    </SelectItem>
+                  ))}
+                  {drivers.length === 0 && (
+                    <SelectItem value="none" disabled>No drivers available</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -449,10 +468,14 @@ export default function DistributorSchedulePage() {
                   <SelectValue placeholder="Select vehicle" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="truck1">Truck #1</SelectItem>
-                  <SelectItem value="truck3">Truck #3</SelectItem>
-                  <SelectItem value="van2">Van #2</SelectItem>
-                  <SelectItem value="van5">Van #5</SelectItem>
+                  {vehicles.map((vehicle) => (
+                    <SelectItem key={vehicle._id} value={vehicle._id}>
+                      {vehicle.name} ({vehicle.licensePlate})
+                    </SelectItem>
+                  ))}
+                  {vehicles.length === 0 && (
+                    <SelectItem value="none" disabled>No vehicles available</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>

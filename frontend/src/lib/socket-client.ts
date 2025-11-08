@@ -14,32 +14,49 @@ class SocketClient {
       return;
     }
 
-    this.socket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
-    });
+    try {
+      this.socket = io(SOCKET_URL, {
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
+        timeout: 5000,
+        autoConnect: true,
+      });
 
-    this.socket.on('connect', () => {
-      console.log('✅ Connected to notification service');
-      this.connected = true;
+      this.socket.on('connect', () => {
+        console.log('✅ Connected to notification service');
+        this.connected = true;
 
-      // Join user-specific room
-      this.socket?.emit('join', { userId, role });
-    });
+        // Join user-specific room
+        this.socket?.emit('join', { userId, role });
+      });
 
-    this.socket.on('joined', (data) => {
-      console.log('Joined notification rooms:', data);
-    });
+      this.socket.on('joined', (data) => {
+        console.log('Joined notification rooms:', data);
+      });
 
-    this.socket.on('disconnect', () => {
-      console.log('❌ Disconnected from notification service');
-      this.connected = false;
-    });
+      this.socket.on('disconnect', () => {
+        console.log('❌ Disconnected from notification service');
+        this.connected = false;
+      });
 
-    this.socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-    });
+      this.socket.on('connect_error', (error) => {
+        // Silently handle connection errors - notification service is optional
+        console.warn('⚠️ Notification service unavailable (non-critical):', error.message);
+        this.connected = false;
+      });
 
-    return this.socket;
+      this.socket.on('reconnect_error', (error) => {
+        console.warn('⚠️ Notification service reconnection failed (non-critical):', error.message);
+      });
+
+      return this.socket;
+    } catch (error: any) {
+      // Silently handle initialization errors
+      console.warn('⚠️ Socket client initialization failed (non-critical):', error.message);
+      return null;
+    }
   }
 
   disconnect() {

@@ -35,12 +35,14 @@ interface Order {
   customerType: string;
   items: Array<{
     productId: string;
-    farmerId: string;
-    productName: string;
+    farmerId?: string;
+    productName?: string;
+    name?: string; // Backend uses 'name'
     quantity: number;
     unit: string;
     pricePerUnit: number;
-    totalPrice: number;
+    totalPrice?: number; // Legacy field
+    subtotal: number; // Backend uses 'subtotal'
   }>;
   totalAmount: number;
   status: string;
@@ -50,7 +52,7 @@ interface Order {
   updatedAt: string;
 }
 
-type OrderStatus = 'all' | 'pending' | 'confirmed' | 'ready' | 'completed';
+type OrderStatus = 'all' | 'pending' | 'confirmed' | 'preparing' | 'ready_for_pickup' | 'completed';
 
 export default function FarmerOrdersPage() {
   const router = useRouter();
@@ -131,8 +133,9 @@ export default function FarmerOrdersPage() {
     all: orders.length,
     pending: orders.filter(o => o.status === 'pending').length,
     confirmed: orders.filter(o => o.status === 'confirmed').length,
-    ready: orders.filter(o => o.status === 'ready').length,
-    completed: orders.filter(o => o.status === 'completed').length,
+    preparing: orders.filter(o => o.status === 'preparing').length,
+    ready_for_pickup: orders.filter(o => o.status === 'ready_for_pickup').length,
+    completed: orders.filter(o => o.status === 'completed' || o.status === 'delivered').length,
   };
 
   const getStatusBadge = (status: string) => {
@@ -141,10 +144,17 @@ export default function FarmerOrdersPage() {
         return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
       case 'confirmed':
         return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Confirmed</Badge>;
-      case 'ready':
+      case 'preparing':
+        return <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">Preparing</Badge>;
+      case 'ready_for_pickup':
         return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Ready for Pickup</Badge>;
+      case 'in_transit':
+        return <Badge className="bg-indigo-100 text-indigo-800 hover:bg-indigo-100">In Transit</Badge>;
+      case 'delivered':
       case 'completed':
         return <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">Completed</Badge>;
+      case 'cancelled':
+        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Cancelled</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -181,7 +191,7 @@ export default function FarmerOrdersPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Pending Orders</CardTitle>
@@ -202,10 +212,19 @@ export default function FarmerOrdersPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">Preparing</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-600">{statusCounts.preparing}</div>
+            <p className="text-xs text-gray-500 mt-1">In preparation</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Ready for Pickup</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{statusCounts.ready}</div>
+            <div className="text-2xl font-bold text-green-600">{statusCounts.ready_for_pickup}</div>
             <p className="text-xs text-gray-500 mt-1">Awaiting collection</p>
           </CardContent>
         </Card>
@@ -247,7 +266,8 @@ export default function FarmerOrdersPage() {
                   <SelectItem value="all">All Orders ({statusCounts.all})</SelectItem>
                   <SelectItem value="pending">Pending ({statusCounts.pending})</SelectItem>
                   <SelectItem value="confirmed">Confirmed ({statusCounts.confirmed})</SelectItem>
-                  <SelectItem value="ready">Ready ({statusCounts.ready})</SelectItem>
+                  <SelectItem value="preparing">Preparing ({statusCounts.preparing})</SelectItem>
+                  <SelectItem value="ready_for_pickup">Ready for Pickup ({statusCounts.ready_for_pickup})</SelectItem>
                   <SelectItem value="completed">Completed ({statusCounts.completed})</SelectItem>
                 </SelectContent>
               </Select>
@@ -293,7 +313,7 @@ export default function FarmerOrdersPage() {
                           </div>
                         </div>
                         <div className="text-sm text-gray-500">
-                          {order.items.length} item{order.items.length !== 1 ? 's' : ''}: {order.items.map(i => `${i.quantity} ${i.unit} ${i.productName}`).join(', ')}
+                          {order.items.length} item{order.items.length !== 1 ? 's' : ''}: {order.items.map(i => `${i.quantity} ${i.unit} ${i.productName || i.name || 'Product'}`).join(', ')}
                         </div>
                       </div>
 
@@ -326,6 +346,26 @@ export default function FarmerOrdersPage() {
                               Reject
                             </Button>
                           </div>
+                        )}
+                        {order.status === 'confirmed' && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleUpdateOrderStatus(order._id, 'preparing')}
+                            className="bg-purple-600 hover:bg-purple-700"
+                          >
+                            <Package className="h-4 w-4 mr-2" />
+                            Start Preparing
+                          </Button>
+                        )}
+                        {order.status === 'preparing' && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleUpdateOrderStatus(order._id, 'ready_for_pickup', 'Order is ready for pickup')}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Mark Ready for Pickup
+                          </Button>
                         )}
                       </div>
                     </div>
@@ -380,15 +420,19 @@ export default function FarmerOrdersPage() {
               <div>
                 <label className="text-sm font-medium text-gray-700">Order Items</label>
                 <div className="mt-2 border rounded-lg divide-y">
-                  {selectedOrder.items.map((item, idx) => (
-                    <div key={idx} className="p-3 flex justify-between items-center">
-                      <div>
-                        <p className="font-medium">{item.productName}</p>
-                        <p className="text-sm text-gray-500">{item.quantity} {item.unit} @ ${item.pricePerUnit}/{item.unit}</p>
+                  {selectedOrder.items.map((item, idx) => {
+                    const itemName = item.productName || item.name || 'Product';
+                    const itemPrice = item.subtotal || item.totalPrice || (item.pricePerUnit * item.quantity);
+                    return (
+                      <div key={idx} className="p-3 flex justify-between items-center">
+                        <div>
+                          <p className="font-medium">{itemName}</p>
+                          <p className="text-sm text-gray-500">{item.quantity} {item.unit} @ ${item.pricePerUnit?.toFixed(2) || '0.00'}/{item.unit}</p>
+                        </div>
+                        <p className="font-semibold">${itemPrice.toFixed(2)}</p>
                       </div>
-                      <p className="font-semibold">${item.totalPrice.toFixed(2)}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                   <div className="p-3 flex justify-between items-center bg-gray-50 font-semibold">
                     <span>Total</span>
                     <span className="text-lg">${selectedOrder.totalAmount.toFixed(2)}</span>
@@ -424,6 +468,24 @@ export default function FarmerOrdersPage() {
                   Reject Order
                 </Button>
               </>
+            )}
+            {selectedOrder?.status === 'confirmed' && (
+              <Button onClick={() => {
+                setShowDetailDialog(false);
+                handleUpdateOrderStatus(selectedOrder._id, 'preparing');
+              }} className="bg-purple-600 hover:bg-purple-700">
+                <Package className="h-4 w-4 mr-2" />
+                Start Preparing
+              </Button>
+            )}
+            {selectedOrder?.status === 'preparing' && (
+              <Button onClick={() => {
+                setShowDetailDialog(false);
+                handleUpdateOrderStatus(selectedOrder._id, 'ready_for_pickup', 'Order is ready for pickup');
+              }} className="bg-green-600 hover:bg-green-700">
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Mark Ready for Pickup
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

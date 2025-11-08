@@ -70,11 +70,12 @@ export const auth = {
           console.log('[Auth] User data stored in localStorage');
         }
 
-        // Connect to real-time notifications
+        // Connect to real-time notifications (optional - fails gracefully if service unavailable)
         try {
           socketClient.connect(user.id, user.role);
-        } catch (socketError) {
-          console.warn('[Auth] Socket connection failed (non-critical):', socketError);
+        } catch (socketError: any) {
+          // Silently ignore - notifications are optional
+          console.warn('[Auth] Socket connection failed (non-critical):', socketError?.message || socketError);
         }
 
         console.log('[Auth] Login successful, returning user');

@@ -96,8 +96,15 @@ export default function DistributorDeliveriesPage() {
   const fetchDeliveries = async (distributorId: string) => {
     try {
       setIsLoading(true);
-      const deliveriesResponse: any = await apiClient.getDeliveries({ distributorId, limit: '100' });
-      const deliveriesList = deliveriesResponse.success ? deliveriesResponse.deliveries || [] : [];
+      // Fetch all deliveries for this distributor (we'll filter active ones client-side)
+      const deliveriesResponse: any = await apiClient.getDeliveries({ 
+        distributorId, 
+        limit: '100' 
+      });
+      let deliveriesList = deliveriesResponse.success ? deliveriesResponse.deliveries || [] : [];
+      
+      // Filter to show active deliveries (picked_up, in_transit) by default
+      // But keep all for filtering options
       
       // Fetch orders for each delivery
       const ordersMap: { [key: string]: Order } = {};

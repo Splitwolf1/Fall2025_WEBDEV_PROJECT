@@ -40,11 +40,27 @@ interface Order {
 interface Delivery {
   _id: string;
   orderId: string;
+  orderNumber: string;
   status: string;
+  driverName?: string;
+  driverPhone?: string;
+  vehicleInfo?: {
+    type: string;
+    plateNumber: string;
+  };
   route?: {
+    pickup?: {
+      actualTime?: string;
+      farmName?: string;
+    };
     delivery?: {
       actualTime?: string;
+      restaurantName?: string;
     };
+  };
+  currentLocation?: {
+    lat: number;
+    lng: number;
   };
   updatedAt: string;
   createdAt: string;
@@ -149,40 +165,57 @@ export default function OrderTrackingPage() {
           });
         }
 
-        if (order.status === 'preparing' || order.status === 'in_transit' || order.status === 'delivered') {
+        if (order.status === 'preparing' || order.status === 'ready_for_pickup' || order.status === 'in_transit' || order.status === 'delivered') {
           timeline.push({
             status: 'preparing',
             label: 'Preparing Order',
             time: orderDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            completed: true,
+            completed: order.status !== 'preparing',
             active: order.status === 'preparing',
           });
         }
 
-        if (order.status === 'in_transit' || order.status === 'delivered') {
+        if (order.status === 'ready_for_pickup' || order.status === 'in_transit' || order.status === 'delivered') {
+          timeline.push({
+            status: 'ready_for_pickup',
+            label: 'Ready for Pickup',
+            time: order.status === 'ready_for_pickup' 
+              ? new Date(order.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : 'TBD',
+            completed: order.status !== 'ready_for_pickup',
+            active: order.status === 'ready_for_pickup',
+          });
+        }
+
+        // Show pickup status from delivery service
+        if (delivery && (delivery.status === 'picked_up' || delivery.status === 'in_transit' || delivery.status === 'delivered')) {
+          const pickupTime = delivery.route?.pickup?.actualTime 
+            ? new Date(delivery.route.pickup.actualTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : delivery.updatedAt 
+            ? new Date(delivery.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : 'TBD';
+          
           timeline.push({
             status: 'picked_up',
-            label: 'Picked Up',
-            time: delivery?.createdAt 
-              ? new Date(delivery.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              : 'TBD',
+            label: 'Picked Up by Driver',
+            time: pickupTime,
             completed: true,
           });
         }
 
-        if (order.status === 'in_transit' || order.status === 'delivered') {
+        if (delivery && (delivery.status === 'in_transit' || delivery.status === 'delivered')) {
           timeline.push({
             status: 'in_transit',
             label: 'In Transit',
-            time: delivery?.updatedAt 
+            time: delivery.updatedAt 
               ? new Date(delivery.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               : 'TBD',
-            completed: order.status === 'delivered',
-            active: order.status === 'in_transit',
+            completed: delivery.status === 'delivered',
+            active: delivery.status === 'in_transit',
           });
         }
 
-        if (order.status === 'delivered') {
+        if (order.status === 'delivered' || delivery?.status === 'delivered') {
           const deliveredTime = delivery?.route?.delivery?.actualTime 
             ? new Date(delivery.route.delivery.actualTime)
             : delivery?.updatedAt 
@@ -198,12 +231,14 @@ export default function OrderTrackingPage() {
           });
         }
 
-        // Calculate progress
+        // Calculate progress based on order and delivery status
         let progress = 0;
-        if (order.status === 'confirmed') progress = 25;
-        else if (order.status === 'preparing') progress = 50;
-        else if (order.status === 'in_transit') progress = 75;
-        else if (order.status === 'delivered') progress = 100;
+        if (order.status === 'pending') progress = 0;
+        else if (order.status === 'confirmed') progress = 20;
+        else if (order.status === 'preparing') progress = 40;
+        else if (order.status === 'ready_for_pickup') progress = 60;
+        else if (delivery?.status === 'picked_up' || order.status === 'in_transit') progress = 75;
+        else if (order.status === 'delivered' || delivery?.status === 'delivered') progress = 100;
 
         // Get supplier name from first item
         const supplierName = order.items?.[0]?.productName ? 'Supplier' : 'Farm';
@@ -213,22 +248,24 @@ export default function OrderTrackingPage() {
           orderNumber: order.orderNumber || order._id.slice(0, 8),
           status: order.status,
           farm: supplierName,
-          driver: order.status === 'in_transit' || order.status === 'delivered' ? 'Driver Assigned' : 'Not assigned',
-          driverPhone: order.status === 'in_transit' || order.status === 'delivered' ? '(555) 000-0000' : null,
-          vehicle: order.status === 'in_transit' || order.status === 'delivered' ? 'VAN-XXX' : null,
+          driver: delivery?.driverName || (order.status === 'in_transit' || order.status === 'delivered' ? 'Driver Assigned' : 'Not assigned'),
+          driverPhone: delivery?.driverPhone || (order.status === 'in_transit' || order.status === 'delivered' ? '(555) 000-0000' : null),
+          vehicle: delivery?.vehicleInfo ? `${delivery.vehicleInfo.type} - ${delivery.vehicleInfo.plateNumber}` : (order.status === 'in_transit' || order.status === 'delivered' ? 'VAN-XXX' : null),
           items: order.items?.map((item: any) => ({
             name: item.productName || 'Product',
             quantity: item.quantity || 0,
             unit: item.unit || 'unit',
           })) || [],
           total: order.totalAmount || 0,
-          estimatedArrival: order.status !== 'delivered' ? 'TBD' : null,
-          deliveredAt: order.status === 'delivered' 
+          estimatedArrival: (order.status !== 'delivered' && delivery?.status !== 'delivered') ? 'TBD' : null,
+          deliveredAt: (order.status === 'delivered' || delivery?.status === 'delivered')
             ? (delivery?.route?.delivery?.actualTime 
                 ? new Date(delivery.route.delivery.actualTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : delivery?.updatedAt
+                ? new Date(delivery.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 : new Date(order.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
             : null,
-          currentLocation: order.status === 'in_transit' ? { lat: 0, lng: 0 } : null,
+          currentLocation: delivery?.currentLocation || (order.status === 'in_transit' ? { lat: 0, lng: 0 } : null),
           progress,
           timeline,
         });

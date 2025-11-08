@@ -96,7 +96,12 @@ class ApiClient {
       }
 
       if (!response.ok) {
-        throw new Error(data.message || `HTTP error! status: ${response.status}`);
+        // Provide more detailed error messages
+        const errorMessage = data.message || data.error || `HTTP error! status: ${response.status}`;
+        if (response.status === 404) {
+          throw new Error(`Endpoint not found: ${endpoint}. Please check if the backend service is running.`);
+        }
+        throw new Error(errorMessage);
       }
 
       return data;
@@ -163,6 +168,11 @@ class ApiClient {
       method: 'PATCH',
       body: JSON.stringify(updates),
     });
+  }
+
+  // Get all users by role (e.g., all farmers for suppliers)
+  async getUsersByRole(role: string) {
+    return this.request(`/api/auth/users?role=${role}`);
   }
 
   // Product endpoints
@@ -371,6 +381,69 @@ class ApiClient {
     return this.request('/api/notify', {
       method: 'POST',
       body: JSON.stringify({ userId, ...notification }),
+    });
+  }
+
+  // Fleet Management endpoints
+  async getVehicles(distributorId?: string, status?: string) {
+    const params = new URLSearchParams();
+    if (distributorId) params.append('distributorId', distributorId);
+    if (status) params.append('status', status);
+    return this.request(`/api/fleet/vehicles?${params.toString()}`);
+  }
+
+  async getVehicle(id: string) {
+    return this.request(`/api/fleet/vehicles/${id}`);
+  }
+
+  async createVehicle(vehicleData: any) {
+    return this.request('/api/fleet/vehicles', {
+      method: 'POST',
+      body: JSON.stringify(vehicleData),
+    });
+  }
+
+  async updateVehicle(id: string, updates: any) {
+    return this.request(`/api/fleet/vehicles/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async deleteVehicle(id: string) {
+    return this.request(`/api/fleet/vehicles/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getDrivers(distributorId?: string, status?: string) {
+    const params = new URLSearchParams();
+    if (distributorId) params.append('distributorId', distributorId);
+    if (status) params.append('status', status);
+    return this.request(`/api/fleet/drivers?${params.toString()}`);
+  }
+
+  async getDriver(id: string) {
+    return this.request(`/api/fleet/drivers/${id}`);
+  }
+
+  async createDriver(driverData: any) {
+    return this.request('/api/fleet/drivers', {
+      method: 'POST',
+      body: JSON.stringify(driverData),
+    });
+  }
+
+  async updateDriver(id: string, updates: any) {
+    return this.request(`/api/fleet/drivers/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async deleteDriver(id: string) {
+    return this.request(`/api/fleet/drivers/${id}`, {
+      method: 'DELETE',
     });
   }
 }

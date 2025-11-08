@@ -52,8 +52,8 @@ const navigationConfig: Record<string, NavItem[]> = {
   ],
   distributor: [
     { label: 'Dashboard', href: '/distributor', icon: LayoutDashboard },
-    { label: 'Active Deliveries', href: '/distributor/deliveries', icon: Truck, badge: '8' },
-    { label: 'Routes', href: '/distributor/routes', icon: MapPin },
+    { label: 'Available Deliveries', href: '/distributor/routes', icon: MapPin, badge: '8' },
+    { label: 'Active Deliveries', href: '/distributor/deliveries', icon: Truck },
     { label: 'Fleet Management', href: '/distributor/fleet', icon: Package },
     { label: 'Schedule', href: '/distributor/schedule', icon: Calendar },
     { label: 'Performance', href: '/distributor/performance', icon: TrendingUp },

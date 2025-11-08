@@ -67,6 +67,7 @@ export default function InventoryPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState('');
   const [user, setUser] = useState<any>(null);
 
@@ -117,25 +118,40 @@ export default function InventoryPage() {
   const handleAddProduct = async () => {
     if (!user) return;
 
+    // Validation
+    if (!newProduct.name.trim()) {
+      setError('Product name is required');
+      return;
+    }
+    if (!newProduct.stockQuantity || parseInt(newProduct.stockQuantity) < 0) {
+      setError('Valid stock quantity is required');
+      return;
+    }
+    if (!newProduct.price || parseFloat(newProduct.price) < 0) {
+      setError('Valid price is required');
+      return;
+    }
+
     try {
+      setIsAdding(true);
       setError('');
       const response: any = await apiClient.createProduct({
         farmerId: user.id,
-        name: newProduct.name,
+        name: newProduct.name.trim(),
         category: newProduct.category,
-        stockQuantity: parseInt(newProduct.stockQuantity),
+        stockQuantity: parseInt(newProduct.stockQuantity) || 0,
         unit: newProduct.unit,
-        price: parseFloat(newProduct.price),
+        price: parseFloat(newProduct.price) || 0,
         qualityGrade: newProduct.qualityGrade,
-        harvestDate: newProduct.harvestDate ? new Date(newProduct.harvestDate) : undefined,
-        description: newProduct.description,
-        certifications: newProduct.certifications,
+        harvestDate: newProduct.harvestDate ? new Date(newProduct.harvestDate).toISOString() : undefined,
+        description: newProduct.description || '',
+        certifications: newProduct.certifications || [],
         isAvailable: true,
       });
 
       if (response.success) {
         setIsAddDialogOpen(false);
-        fetchProducts(user.id);
+        await fetchProducts(user.id);
         // Reset form
         setNewProduct({
           name: '',
@@ -148,10 +164,14 @@ export default function InventoryPage() {
           description: '',
           certifications: [],
         });
+      } else {
+        setError(response.message || 'Failed to add product');
       }
     } catch (err: any) {
       console.error('Error creating product:', err);
-      setError(err.message || 'Failed to add product');
+      setError(err.message || 'Failed to add product. Please check your connection and try again.');
+    } finally {
+      setIsAdding(false);
     }
   };
 
@@ -452,7 +472,19 @@ export default function InventoryPage() {
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleAddProduct}>Add Product</Button>
+                <Button onClick={handleAddProduct} disabled={isAdding}>
+                  {isAdding ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Product
+                    </>
+                  )}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

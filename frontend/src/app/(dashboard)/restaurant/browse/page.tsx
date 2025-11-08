@@ -157,19 +157,26 @@ export default function BrowseProductsPage() {
 
       // Build order items from cart
       const items = Object.entries(cartItems).map(([productId, quantity]) => {
-        const product = products.find(p => p._id === productId);
+        const product = products.find(p => p._id === productId || p.id === productId);
         if (!product) return null;
 
+        // Handle different farmerId formats
+        const farmerId = product.farmerId?._id || product.farmerId?.id || product.farmerId;
+
         return {
-          productId: product._id,
-          farmerId: product.farmerId,
+          productId: product._id || product.id,
+          farmerId: farmerId,
           productName: product.name,
-          quantity,
-          unit: product.unit,
-          pricePerUnit: product.price,
-          totalPrice: product.price * quantity,
+          quantity: Number(quantity),
+          unit: product.unit || 'unit',
+          pricePerUnit: Number(product.price) || 0,
+          totalPrice: (Number(product.price) || 0) * Number(quantity),
         };
       }).filter(Boolean);
+
+      if (items.length === 0) {
+        throw new Error('No valid items in cart');
+      }
 
       // Create order
       const response: any = await apiClient.createOrder({
@@ -191,11 +198,15 @@ export default function BrowseProductsPage() {
         // Clear cart
         setCartItems({});
 
-        // Show success message (you could use a toast library here)
-        alert(`Order #${response.order?.orderNumber || 'created'} placed successfully!`);
+        // Show success message
+        const orderCount = response.orders?.length || 1;
+        const orderNumbers = response.orders?.map((o: any) => o.orderNumber).join(', ') || response.order?.orderNumber || 'created';
+        alert(`Order${orderCount > 1 ? 's' : ''} #${orderNumbers} placed successfully!`);
 
         // Redirect to orders page
         router.push('/restaurant/orders');
+      } else {
+        throw new Error(response.message || 'Failed to place order');
       }
     } catch (err: any) {
       console.error('Checkout error:', err);
