@@ -103,8 +103,10 @@ export default function DistributorDeliveriesPage() {
       });
       let deliveriesList = deliveriesResponse.success ? deliveriesResponse.deliveries || [] : [];
       
-      // Filter to show active deliveries (picked_up, in_transit) by default
-      // But keep all for filtering options
+      // Filter out pickup_pending deliveries (those should only appear in Available Deliveries)
+      deliveriesList = deliveriesList.filter((d: any) => 
+        d.status !== 'pickup_pending' && d.status !== 'ready_for_pickup'
+      );
       
       // Fetch orders for each delivery
       const ordersMap: { [key: string]: Order } = {};
@@ -335,7 +337,30 @@ export default function DistributorDeliveriesPage() {
                         <p className="text-sm text-gray-500 mt-1">Order {delivery.orderId.slice(-6)}</p>
                       </div>
                       {delivery.status === 'scheduled' && (
-                        <Button>
+                        <Button
+                          onClick={async () => {
+                            try {
+                              const response: any = await apiClient.updateDeliveryStatus(
+                                delivery._id,
+                                'picked_up',
+                                'Route started - driver en route to pickup location'
+                              );
+                              
+                              if (response.success) {
+                                // Refresh deliveries
+                                const currentUser = auth.getCurrentUser();
+                                if (currentUser) {
+                                  await fetchDeliveries(currentUser.id);
+                                }
+                              } else {
+                                alert('Failed to start route. Please try again.');
+                              }
+                            } catch (error: any) {
+                              console.error('Error starting route:', error);
+                              alert(error.message || 'Failed to start route');
+                            }
+                          }}
+                        >
                           <Play className="h-4 w-4 mr-2" />
                           Start Route
                         </Button>

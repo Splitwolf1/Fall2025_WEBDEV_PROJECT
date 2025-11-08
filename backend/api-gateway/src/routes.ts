@@ -159,6 +159,36 @@ router.use(
     pathRewrite: {
       '^/api/deliveries': '/api/deliveries',
     },
+    timeout: 30000,
+    proxyTimeout: 30000,
+    onProxyReq: (proxyReq, req, res) => {
+      console.log(`[Proxy] ${req.method} ${req.path} -> ${DELIVERY_SERVICE}${req.path}`);
+      
+      // If body was parsed by express.json(), re-stringify it for forwarding
+      if (req.body && Object.keys(req.body).length > 0) {
+        const bodyString = JSON.stringify(req.body);
+        proxyReq.setHeader('Content-Type', 'application/json');
+        proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyString));
+        proxyReq.write(bodyString);
+      }
+    },
+    onProxyRes: (proxyRes, req, res) => {
+      console.log(`[Proxy] Response: ${proxyRes.statusCode} for ${req.method} ${req.path}`);
+    },
+    onError: (err, req, res) => {
+      console.error('[Proxy] Delivery proxy error:', {
+        message: err.message,
+        code: err.code,
+        path: req.path,
+      });
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: 'Delivery service unavailable. Please try again.',
+          error: err.message,
+        });
+      }
+    },
   })
 );
 

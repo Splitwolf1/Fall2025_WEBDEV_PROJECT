@@ -62,17 +62,23 @@ const createDelivery = async (order: any) => {
       route: {
         pickup: {
           farmId: order.farmerId.toString(),
-          farmName: order.farmerName,
-          location: { lat: 0, lng: 0 }, // Will be updated from farmer details
+          farmName: order.farmerName || 'Farm',
+          location: {
+            lat: Number(order.deliveryAddress?.coordinates?.lat) || 0,
+            lng: Number(order.deliveryAddress?.coordinates?.lng) || 0,
+          },
           address: 'Farm Address TBD',
           scheduledTime: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
         },
         delivery: {
           restaurantId: order.customerId.toString(),
-          restaurantName: order.customerName,
-          location: order.deliveryAddress?.coordinates || { lat: 0, lng: 0 },
+          restaurantName: order.customerName || 'Restaurant',
+          location: {
+            lat: Number(order.deliveryAddress?.coordinates?.lat) || 0,
+            lng: Number(order.deliveryAddress?.coordinates?.lng) || 0,
+          },
           address: order.deliveryAddress 
-            ? `${order.deliveryAddress.street || ''}, ${order.deliveryAddress.city || ''}, ${order.deliveryAddress.state || ''} ${order.deliveryAddress.zipCode || ''}`.trim()
+            ? `${order.deliveryAddress.street || ''}, ${order.deliveryAddress.city || ''}, ${order.deliveryAddress.state || ''} ${order.deliveryAddress.zipCode || ''}`.trim() || 'Delivery Address TBD'
             : 'Delivery Address TBD',
           scheduledTime: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48 hours from now
         },
@@ -258,12 +264,15 @@ router.post('/', async (req: Request, res: Response) => {
         items: farmerData.items,
         totalAmount: farmerData.totalAmount,
         status: OrderStatus.PENDING, // Orders start as pending, farmer must confirm
-        deliveryAddress: deliveryAddress || {
-          street: '',
-          city: '',
-          state: '',
-          zipCode: '',
-          coordinates: { lat: 0, lng: 0 },
+        deliveryAddress: {
+          street: deliveryAddress?.street || '',
+          city: deliveryAddress?.city || '',
+          state: deliveryAddress?.state || '',
+          zipCode: deliveryAddress?.zipCode || '',
+          coordinates: {
+            lat: Number(deliveryAddress?.coordinates?.lat) || 0,
+            lng: Number(deliveryAddress?.coordinates?.lng) || 0,
+          },
         },
         specialInstructions: notes || '',
       };

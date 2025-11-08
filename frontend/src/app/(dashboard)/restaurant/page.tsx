@@ -207,7 +207,7 @@ export default function RestaurantDashboard() {
         avgDelivery: {
           value: avgDeliveryData.avgTime,
           status: `On time rate: ${avgDeliveryData.onTimeRate}%`,
-        },
+    },
       });
 
       setActiveOrders(formattedActiveOrders);
@@ -421,58 +421,58 @@ export default function RestaurantDashboard() {
                   <p className="text-center text-gray-500 py-8">No active orders</p>
                 ) : (
                   activeOrders.map((order) => (
-                    <div
-                      key={order.id}
-                      className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="font-semibold text-gray-900">{order.id}</p>
-                            <Badge className={getStatusColor(order.status)}>
-                              {getStatusText(order.status)}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-gray-600 font-medium">{order.supplier}</p>
-                          <p className="text-sm text-gray-500 mt-1">{order.items}</p>
+                  <div
+                    key={order.id}
+                    className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-semibold text-gray-900">{order.id}</p>
+                          <Badge className={getStatusColor(order.status)}>
+                            {getStatusText(order.status)}
+                          </Badge>
                         </div>
-                        <div className="text-right">
-                          <div className="flex items-center gap-1 text-sm text-gray-600">
-                            <Clock className="h-4 w-4" />
-                            <span>ETA: {order.eta}</span>
-                          </div>
+                        <p className="text-sm text-gray-600 font-medium">{order.supplier}</p>
+                        <p className="text-sm text-gray-500 mt-1">{order.items}</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="flex items-center gap-1 text-sm text-gray-600">
+                          <Clock className="h-4 w-4" />
+                          <span>ETA: {order.eta}</span>
                         </div>
                       </div>
+                    </div>
 
-                      {/* Progress Bar */}
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs text-gray-500">
-                          <span>Progress</span>
-                          <span>{order.progress}%</span>
-                        </div>
-                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-green-600 rounded-full transition-all"
-                            style={{ width: `${order.progress}%` }}
-                          />
-                        </div>
+                    {/* Progress Bar */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Progress</span>
+                        <span>{order.progress}%</span>
                       </div>
+                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-green-600 rounded-full transition-all"
+                          style={{ width: `${order.progress}%` }}
+                        />
+                      </div>
+                    </div>
 
-                      <div className="flex gap-2 mt-3">
+                    <div className="flex gap-2 mt-3">
                         <Button 
                           variant="outline" 
                           size="sm" 
                           className="gap-1"
                           onClick={() => router.push(`/restaurant/tracking?orderId=${order.orderId}`)}
                         >
-                          <MapPin className="h-3 w-3" />
-                          Track
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          Contact Supplier
-                        </Button>
-                      </div>
+                        <MapPin className="h-3 w-3" />
+                        Track
+                      </Button>
+                      <Button variant="outline" size="sm">
+                        Contact Supplier
+                      </Button>
                     </div>
+                  </div>
                   ))
                 )}
               </div>
@@ -496,29 +496,29 @@ export default function RestaurantDashboard() {
                       <p className="text-center text-gray-500 py-8 col-span-2">No featured products available</p>
                     ) : (
                       featuredProducts.map((product) => (
-                        <div
+                      <div
                           key={product._id}
-                          className="border rounded-lg p-4 hover:shadow-md transition-shadow"
-                        >
-                          <div className="flex items-start justify-between mb-3">
+                        className="border rounded-lg p-4 hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex items-start justify-between mb-3">
                             <div className="text-4xl">{getProductEmoji(product.category)}</div>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <Heart className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          <h3 className="font-semibold text-gray-900 mb-1">{product.name}</h3>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Heart className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <h3 className="font-semibold text-gray-900 mb-1">{product.name}</h3>
                           <p className="text-sm text-gray-500 mb-2">{product.farmerName || 'Farm'}</p>
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className="flex items-center gap-1">
-                              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="flex items-center gap-1">
+                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
                               <span className="text-sm font-medium">4.5</span>
-                            </div>
-                            <div className="flex items-center gap-1 text-sm text-gray-500">
+                          </div>
+                          <div className="flex items-center gap-1 text-sm text-gray-500">
                               <Package className="h-3 w-3" />
                               <span>{product.stockQuantity} {product.unit} available</span>
-                            </div>
                           </div>
-                          <div className="flex items-center justify-between">
+                        </div>
+                        <div className="flex items-center justify-between">
                             <span className="text-lg font-bold text-green-600">
                               ${product.price.toFixed(2)}/{product.unit}
                             </span>
@@ -529,11 +529,11 @@ export default function RestaurantDashboard() {
                               >
                                 Add to Cart
                               </Button>
-                            ) : (
-                              <Badge variant="secondary">Out of Stock</Badge>
-                            )}
-                          </div>
+                          ) : (
+                            <Badge variant="secondary">Out of Stock</Badge>
+                          )}
                         </div>
+                      </div>
                       ))
                     )}
                   </div>
@@ -552,26 +552,26 @@ export default function RestaurantDashboard() {
                     <p className="text-center text-gray-500 py-8">No suppliers yet</p>
                   ) : (
                     topSuppliers.map((supplier, index) => (
-                      <div key={supplier.name} className="flex items-start gap-3">
-                        <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center font-semibold text-green-700 flex-shrink-0">
-                          #{index + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 truncate">{supplier.name}</p>
-                          <p className="text-xs text-gray-500">{supplier.specialty}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <div className="flex items-center gap-1">
-                              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                              <span className="text-xs font-medium">{supplier.rating}</span>
-                            </div>
-                            <span className="text-xs text-gray-400">•</span>
-                            <span className="text-xs text-gray-500">{supplier.orders} orders</span>
-                          </div>
-                        </div>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <Heart className="h-4 w-4 fill-red-500 text-red-500" />
-                        </Button>
+                    <div key={supplier.name} className="flex items-start gap-3">
+                      <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center font-semibold text-green-700 flex-shrink-0">
+                        #{index + 1}
                       </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{supplier.name}</p>
+                        <p className="text-xs text-gray-500">{supplier.specialty}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex items-center gap-1">
+                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                            <span className="text-xs font-medium">{supplier.rating}</span>
+                          </div>
+                          <span className="text-xs text-gray-400">•</span>
+                          <span className="text-xs text-gray-500">{supplier.orders} orders</span>
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <Heart className="h-4 w-4 fill-red-500 text-red-500" />
+                      </Button>
+                    </div>
                     ))
                   )}
                 </div>

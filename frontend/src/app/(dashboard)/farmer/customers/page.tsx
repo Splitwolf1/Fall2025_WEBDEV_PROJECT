@@ -450,9 +450,9 @@ export default function FarmerCustomersPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {filteredCustomers.map(renderCustomerCard)}
-            </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {filteredCustomers.map(renderCustomerCard)}
+          </div>
           )}
         </TabsContent>
       </Tabs>

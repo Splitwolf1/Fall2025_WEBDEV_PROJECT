@@ -162,6 +162,8 @@ router.get('/drivers', async (req: Request, res: Response) => {
   try {
     const { distributorId, status } = req.query;
 
+    console.log(`[Fleet-Service] GET /api/fleet/drivers - Filters:`, { distributorId, status });
+
     let query: any = {};
     if (distributorId) {
       // Convert string ID to ObjectId if it's a valid MongoDB ObjectId
@@ -175,12 +177,14 @@ router.get('/drivers', async (req: Request, res: Response) => {
 
     const drivers = await Driver.find(query).sort({ createdAt: -1 });
 
+    console.log(`[Fleet-Service] Found ${drivers.length} drivers with query:`, query);
+
     res.json({
       success: true,
       drivers,
     });
   } catch (error: any) {
-    console.error('Get drivers error:', error);
+    console.error('[Fleet-Service] Get drivers error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',

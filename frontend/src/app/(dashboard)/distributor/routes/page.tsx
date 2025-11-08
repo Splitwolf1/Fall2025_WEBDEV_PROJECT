@@ -16,10 +16,15 @@ import {
   Loader2,
   ArrowRight,
   DollarSign,
+  Car,
+  User,
 } from 'lucide-react';
 import { auth } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
 import { socketClient } from '@/lib/socket-client';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 interface Delivery {
   _id: string;
@@ -72,6 +77,13 @@ export default function AvailableDeliveriesPage() {
   const [orders, setOrders] = useState<{ [key: string]: Order }>({});
   const [isLoading, setIsLoading] = useState(true);
   const [acceptingDelivery, setAcceptingDelivery] = useState<string | null>(null);
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
+  const [selectedDriverId, setSelectedDriverId] = useState<string>('');
+  const [isAssigning, setIsAssigning] = useState(false);
 
   useEffect(() => {
     const currentUser = auth.getCurrentUser();
@@ -98,8 +110,8 @@ export default function AvailableDeliveriesPage() {
   const fetchAvailableDeliveries = async () => {
     try {
       setIsLoading(true);
-      // Fetch ALL deliveries that are ready for pickup (pickup_pending)
-      // Don't filter by distributorId - these are available for any distributor to accept
+      // Fetch ONLY deliveries that are ready for pickup (pickup_pending)
+      // Exclude scheduled, picked_up, in_transit, delivered - those appear in Active Deliveries
       const deliveriesResponse: any = await apiClient.getDeliveries({ 
         status: 'pickup_pending',
         limit: '100' 
@@ -107,17 +119,12 @@ export default function AvailableDeliveriesPage() {
       
       let deliveriesList = deliveriesResponse.success ? deliveriesResponse.deliveries || [] : [];
       
-      console.log(`[Available Deliveries] Found ${deliveriesList.length} pickup_pending deliveries`);
+      // Double-check: filter out any deliveries that are not pickup_pending
+      deliveriesList = deliveriesList.filter((d: any) => 
+        d.status === 'pickup_pending' || d.status === 'ready_for_pickup'
+      );
       
-      // If no pickup_pending, also check scheduled deliveries (fallback)
-      if (deliveriesList.length === 0) {
-        const scheduledResponse: any = await apiClient.getDeliveries({ 
-          status: 'scheduled',
-          limit: '100' 
-        });
-        deliveriesList = scheduledResponse.success ? scheduledResponse.deliveries || [] : [];
-        console.log(`[Available Deliveries] Found ${deliveriesList.length} scheduled deliveries (fallback)`);
-      }
+      console.log(`[Available Deliveries] Found ${deliveriesList.length} pickup_pending deliveries`);
 
       // Fetch order details for each delivery
       const ordersMap: { [key: string]: Order } = {};
@@ -142,26 +149,127 @@ export default function AvailableDeliveriesPage() {
     }
   };
 
-  const handleAcceptDelivery = async (deliveryId: string) => {
+  const handleAssignVehicle = async (delivery: Delivery) => {
     try {
-      setAcceptingDelivery(deliveryId);
-      
-      // Update delivery status to picked_up (driver accepts and goes to pickup)
-      const response: any = await apiClient.updateDeliveryStatus(deliveryId, 'picked_up', 'Driver accepted delivery');
-      
-      if (response.success) {
-        // Remove from available deliveries
-        setDeliveries(prev => prev.filter(d => d._id !== deliveryId));
-        // Navigate to active deliveries
-        router.push('/distributor/deliveries');
-      } else {
-        alert('Failed to accept delivery. Please try again.');
+      setAcceptingDelivery(delivery._id);
+      const user = auth.getCurrentUser();
+      if (!user || !user.id) {
+        alert('Please log in to assign vehicles');
+        return;
       }
+
+      // Fetch available vehicles and drivers
+      const [vehiclesResponse, driversResponse, offDutyDriversResponse] = await Promise.all([
+        apiClient.getVehicles(user.id, 'available'),
+        apiClient.getDrivers(user.id, 'available'), // Fetch drivers with 'available' status
+        apiClient.getDrivers(user.id, 'off_duty'), // Fallback: also fetch off_duty drivers
+      ]);
+
+      const availableVehicles = vehiclesResponse.success ? vehiclesResponse.vehicles || [] : [];
+      let availableDrivers = driversResponse.success ? driversResponse.drivers || [] : [];
+      
+      // If no available drivers, use off_duty as fallback
+      if (availableDrivers.length === 0 && offDutyDriversResponse.success) {
+        availableDrivers = offDutyDriversResponse.drivers || [];
+        console.log('[Available Deliveries] No available drivers, using off_duty drivers as fallback');
+      }
+      
+      console.log('[Available Deliveries] Fetched vehicles:', availableVehicles.length);
+      console.log('[Available Deliveries] Fetched drivers:', availableDrivers.length);
+      console.log('[Available Deliveries] Driver response:', driversResponse);
+
+      setVehicles(availableVehicles);
+      setDrivers(availableDrivers);
+      setSelectedDelivery(delivery);
+      setSelectedVehicleId('');
+      setSelectedDriverId('');
+      setShowAssignDialog(true);
     } catch (error: any) {
-      console.error('Error accepting delivery:', error);
-      alert(error.message || 'Failed to accept delivery');
+      console.error('Error fetching vehicles/drivers:', error);
+      alert('Failed to load vehicles and drivers');
     } finally {
       setAcceptingDelivery(null);
+    }
+  };
+
+  const handleConfirmAssignment = async () => {
+    if (!selectedDelivery || !selectedVehicleId || !selectedDriverId) {
+      alert('Please select both a vehicle and a driver');
+      return;
+    }
+
+    try {
+      setIsAssigning(true);
+      const user = auth.getCurrentUser();
+      if (!user || !user.id) {
+        alert('Please log in to assign vehicles');
+        return;
+      }
+
+      // Get selected vehicle and driver details
+      const vehicle = vehicles.find(v => v._id === selectedVehicleId);
+      const driver = drivers.find(d => d._id === selectedDriverId);
+
+      if (!vehicle || !driver) {
+        alert('Selected vehicle or driver not found');
+        return;
+      }
+
+      // Update delivery with vehicle, driver, and distributor assignment
+      const response: any = await apiClient.updateDeliveryStatus(
+        selectedDelivery._id,
+        'scheduled', // Change status to scheduled (assigned and ready)
+        `Assigned to ${driver.name} with ${vehicle.make} ${vehicle.model} (${vehicle.licensePlate})`,
+        undefined,
+        user.id, // distributorId
+        selectedVehicleId,
+        selectedDriverId,
+        {
+          type: `${vehicle.make} ${vehicle.model}`,
+          plateNumber: vehicle.licensePlate,
+        },
+        {
+          name: driver.name,
+          phone: driver.phone,
+        }
+      );
+
+      if (response.success) {
+        // Update vehicle and driver status
+        await Promise.all([
+          apiClient.updateVehicle(selectedVehicleId, { 
+            status: 'active',
+            currentDriver: selectedDriverId,
+          }),
+          apiClient.updateDriver(selectedDriverId, {
+            status: 'scheduled',
+            vehicleAssigned: selectedVehicleId,
+          }),
+        ]);
+
+        // Remove from available deliveries immediately
+        setDeliveries(prev => prev.filter(d => d._id !== selectedDelivery._id));
+        setShowAssignDialog(false);
+        setSelectedDelivery(null);
+        setSelectedVehicleId('');
+        setSelectedDriverId('');
+        
+        // Refresh the list to ensure it's up to date
+        await fetchAvailableDeliveries();
+        
+        // Show success message
+        alert('Delivery assigned successfully! It will now appear in Active Deliveries.');
+        
+        // Optionally navigate to active deliveries
+        // router.push('/distributor/deliveries');
+      } else {
+        alert('Failed to assign vehicle and driver. Please try again.');
+      }
+    } catch (error: any) {
+      console.error('Error assigning vehicle/driver:', error);
+      alert(error.message || 'Failed to assign vehicle and driver');
+    } finally {
+      setIsAssigning(false);
     }
   };
 
@@ -263,7 +371,6 @@ export default function AvailableDeliveriesPage() {
             );
             const estimatedTime = getEstimatedTime(delivery);
             const pickupTime = new Date(delivery.route.pickup.scheduledTime);
-            const isAccepting = acceptingDelivery === delivery._id;
 
             return (
               <Card key={delivery._id} className="hover:shadow-lg transition-shadow">
@@ -360,21 +467,21 @@ export default function AvailableDeliveriesPage() {
                     </div>
                   </div>
 
-                  {/* Accept Button */}
+                  {/* Assign Vehicle Button */}
                   <Button
                     className="w-full bg-green-600 hover:bg-green-700"
-                    onClick={() => handleAcceptDelivery(delivery._id)}
-                    disabled={isAccepting}
+                    onClick={() => handleAssignVehicle(delivery)}
+                    disabled={acceptingDelivery === delivery._id}
                   >
-                    {isAccepting ? (
+                    {acceptingDelivery === delivery._id ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Accepting...
+                        Loading...
                       </>
                     ) : (
                       <>
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        Accept Delivery
+                        <Car className="h-4 w-4 mr-2" />
+                        Assign Vehicle
                       </>
                     )}
                   </Button>
@@ -384,6 +491,108 @@ export default function AvailableDeliveriesPage() {
           })}
         </div>
       )}
+
+      {/* Assign Vehicle & Driver Dialog */}
+      <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Assign Vehicle & Driver</DialogTitle>
+            <DialogDescription>
+              Select a vehicle and driver for this delivery
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Vehicle Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="vehicle">Vehicle *</Label>
+              <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+                <SelectTrigger id="vehicle">
+                  <SelectValue placeholder="Select a vehicle" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vehicles.length === 0 ? (
+                    <SelectItem value="none" disabled>No available vehicles</SelectItem>
+                  ) : (
+                    vehicles.map((vehicle) => (
+                      <SelectItem key={vehicle._id} value={vehicle._id}>
+                        {vehicle.make} {vehicle.model} ({vehicle.licensePlate}) - {vehicle.capacity}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Driver Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="driver">Driver *</Label>
+              <Select value={selectedDriverId} onValueChange={setSelectedDriverId}>
+                <SelectTrigger id="driver">
+                  <SelectValue placeholder="Select a driver" />
+                </SelectTrigger>
+                <SelectContent>
+                  {drivers.length === 0 ? (
+                    <SelectItem value="none" disabled>No available drivers. Update driver status to "available" in Fleet Management.</SelectItem>
+                  ) : (
+                    drivers.map((driver: any) => (
+                      <SelectItem key={driver._id || driver.id} value={driver._id || driver.id}>
+                        {driver.name} - {driver.phone} ({driver.deliveriesCompleted || 0} deliveries) [{driver.status || 'N/A'}]
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedDelivery && (
+              <div className="pt-2 border-t">
+                <p className="text-sm text-gray-600">
+                  <strong>Order:</strong> {selectedDelivery.orderNumber}
+                </p>
+                <p className="text-sm text-gray-600">
+                  <strong>From:</strong> {selectedDelivery.route.pickup.farmName}
+                </p>
+                <p className="text-sm text-gray-600">
+                  <strong>To:</strong> {selectedDelivery.route.delivery.restaurantName}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAssignDialog(false);
+                setSelectedDelivery(null);
+                setSelectedVehicleId('');
+                setSelectedDriverId('');
+              }}
+              disabled={isAssigning}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmAssignment}
+              disabled={!selectedVehicleId || !selectedDriverId || isAssigning}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isAssigning ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Assigning...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Assign & Accept
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

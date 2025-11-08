@@ -143,9 +143,19 @@ export default function NotificationDropdown() {
                       {notification.message}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
-                      {formatDistanceToNow(new Date(notification.createdAt), {
-                        addSuffix: true,
-                      })}
+                      {notification.createdAt ? (() => {
+                        try {
+                          const date = new Date(notification.createdAt);
+                          if (isNaN(date.getTime())) {
+                            return 'Just now';
+                          }
+                          return formatDistanceToNow(date, {
+                            addSuffix: true,
+                          });
+                        } catch (error) {
+                          return 'Just now';
+                        }
+                      })() : 'Just now'}
                     </p>
                   </div>
                 </div>

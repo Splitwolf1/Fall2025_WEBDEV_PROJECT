@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Search,
   Truck,
@@ -53,7 +54,7 @@ interface Driver {
   name: string;
   phone: string;
   email: string;
-  status: 'on_route' | 'scheduled' | 'off_duty';
+  status: 'on_route' | 'scheduled' | 'off_duty' | 'available';
   vehicleAssigned?: string;
   licensedSince: string;
   deliveriesCompleted: number;
@@ -72,6 +73,18 @@ export default function DistributorFleetPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showAssignDriverDialog, setShowAssignDriverDialog] = useState(false);
+  const [showAssignVehicleDialog, setShowAssignVehicleDialog] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
+  const [availableDrivers, setAvailableDrivers] = useState<Driver[]>([]);
+  const [availableVehicles, setAvailableVehicles] = useState<Vehicle[]>([]);
+  const [selectedDriverId, setSelectedDriverId] = useState<string>('');
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
+  const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [selectedDriverForStatus, setSelectedDriverForStatus] = useState<Driver | null>(null);
+  const [newDriverStatus, setNewDriverStatus] = useState<string>('');
+  const [activeDeliveries, setActiveDeliveries] = useState<any[]>([]);
 
   // Form states
   const [vehicleForm, setVehicleForm] = useState({
@@ -89,7 +102,7 @@ export default function DistributorFleetPage() {
     phone: '',
     email: '',
     licensedSince: new Date().getFullYear().toString(),
-    status: 'off_duty' as 'on_route' | 'scheduled' | 'off_duty',
+      status: 'off_duty' as 'on_route' | 'scheduled' | 'off_duty' | 'available',
   });
 
   useEffect(() => {
@@ -99,11 +112,13 @@ export default function DistributorFleetPage() {
       return;
     }
     fetchFleetData(currentUser.id);
+    fetchActiveDeliveries(currentUser.id);
 
     // Listen for real-time updates
     const handleNotification = (notification: any) => {
       if (notification.type === 'delivery' || notification.type === 'order') {
         fetchFleetData(currentUser.id);
+        fetchActiveDeliveries(currentUser.id);
       }
     };
 
@@ -113,6 +128,102 @@ export default function DistributorFleetPage() {
       socketClient.offNotification(handleNotification);
     };
   }, [router]);
+
+  const fetchActiveDeliveries = async (distributorId: string) => {
+    try {
+      // Fetch active deliveries to check if drivers are locked
+      const [scheduledResponse, pickedUpResponse, inTransitResponse] = await Promise.all([
+        apiClient.getDeliveries({ distributorId, status: 'scheduled' }),
+        apiClient.getDeliveries({ distributorId, status: 'picked_up' }),
+        apiClient.getDeliveries({ distributorId, status: 'in_transit' }),
+      ]);
+      
+      const allActive = [
+        ...(scheduledResponse.success ? scheduledResponse.deliveries || [] : []),
+        ...(pickedUpResponse.success ? pickedUpResponse.deliveries || [] : []),
+        ...(inTransitResponse.success ? inTransitResponse.deliveries || [] : []),
+      ];
+      
+      setActiveDeliveries(allActive);
+    } catch (error) {
+      console.error('Error fetching active deliveries:', error);
+      setActiveDeliveries([]);
+    }
+  };
+
+  const isDriverLocked = (driver: Driver): boolean => {
+    // Check if driver is assigned to an active delivery
+    return activeDeliveries.some(delivery => 
+      delivery.driverName === driver.name || 
+      (delivery.driverPhone && delivery.driverPhone === driver.phone)
+    );
+  };
+
+  const handleUpdateDriverStatus = async (driver: Driver) => {
+    // Check if driver is locked on a delivery
+    if (isDriverLocked(driver) && (driver.status === 'scheduled' || driver.status === 'on_route')) {
+      setError('Cannot change status: Driver is assigned to an active delivery');
+      return;
+    }
+    
+    setSelectedDriverForStatus(driver);
+    setNewDriverStatus(driver.status);
+    setShowStatusDialog(true);
+  };
+
+  const handleConfirmStatusUpdate = async () => {
+    if (!selectedDriverForStatus || !newDriverStatus) {
+      return;
+    }
+
+    // Double-check if driver is locked
+    if (isDriverLocked(selectedDriverForStatus) && (selectedDriverForStatus.status === 'scheduled' || selectedDriverForStatus.status === 'on_route')) {
+      setError('Cannot change status: Driver is assigned to an active delivery');
+      setShowStatusDialog(false);
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setError('');
+      setSuccess('');
+
+      const updates: any = { status: newDriverStatus };
+      
+      // If changing to available or off_duty, unassign vehicle
+      if ((newDriverStatus === 'available' || newDriverStatus === 'off_duty') && selectedDriverForStatus.vehicleAssigned) {
+        const vehicle = vehicles.find(v => v._id === selectedDriverForStatus.vehicleAssigned);
+        if (vehicle) {
+          await apiClient.updateVehicle(vehicle._id, {
+            currentDriver: '',
+            status: 'available',
+          });
+        }
+        updates.vehicleAssigned = '';
+      }
+
+      const response: any = await apiClient.updateDriver(selectedDriverForStatus._id, updates);
+
+      if (response.success) {
+        setSuccess(`Driver status updated to ${newDriverStatus} successfully!`);
+        setShowStatusDialog(false);
+        setSelectedDriverForStatus(null);
+        setNewDriverStatus('');
+        
+        const currentUser = auth.getCurrentUser();
+        if (currentUser) {
+          await fetchFleetData(currentUser.id);
+          await fetchActiveDeliveries(currentUser.id);
+        }
+      } else {
+        setError(response.message || 'Failed to update driver status');
+      }
+    } catch (error: any) {
+      setError(error.message || 'Failed to update driver status');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const fetchFleetData = async (distributorId: string) => {
     try {
@@ -241,11 +352,135 @@ export default function DistributorFleetPage() {
         return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">On Route</Badge>;
       case 'scheduled':
         return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Scheduled</Badge>;
+      case 'available':
+        return <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">Available</Badge>;
       case 'off_duty':
         return <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">Off Duty</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
+  };
+
+  const handleAssignDriverToVehicle = async (vehicle: Vehicle) => {
+    try {
+      // Get available drivers (available status)
+      const available = drivers.filter(d => d.status === 'available');
+      setAvailableDrivers(available);
+      setSelectedVehicle(vehicle);
+      setSelectedDriverId('');
+      setShowAssignDriverDialog(true);
+    } catch (error: any) {
+      setError('Failed to load drivers');
+    }
+  };
+
+  const handleAssignVehicleToDriver = async (driver: Driver) => {
+    try {
+      // Only allow if driver is available
+      if (driver.status !== 'available') {
+        setError('Driver must be available to assign a vehicle');
+        return;
+      }
+      
+      // Get available vehicles (available status)
+      const available = vehicles.filter(v => v.status === 'available');
+      setAvailableVehicles(available);
+      setSelectedDriver(driver);
+      setSelectedVehicleId('');
+      setShowAssignVehicleDialog(true);
+    } catch (error: any) {
+      setError('Failed to load vehicles');
+    }
+  };
+
+  const handleConfirmDriverAssignment = async () => {
+    if (!selectedVehicle || !selectedDriverId) {
+      setError('Please select a driver');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setError('');
+      setSuccess('');
+
+      // Update vehicle with driver assignment
+      const response: any = await apiClient.updateVehicle(selectedVehicle._id, {
+        currentDriver: selectedDriverId,
+        status: 'active', // Vehicle becomes active when assigned
+      });
+
+      if (response.success) {
+        // Update driver status - keep as available when assigned to vehicle
+        await apiClient.updateDriver(selectedDriverId, {
+          vehicleAssigned: selectedVehicle._id,
+          status: 'available', // Driver stays available until assigned to a delivery
+        });
+
+        setSuccess(`Driver assigned to ${selectedVehicle.make} ${selectedVehicle.model} successfully!`);
+        setShowAssignDriverDialog(false);
+        setSelectedVehicle(null);
+        setSelectedDriverId('');
+        
+        const currentUser = auth.getCurrentUser();
+        if (currentUser) {
+          await fetchFleetData(currentUser.id);
+        }
+      } else {
+        setError(response.message || 'Failed to assign driver');
+      }
+    } catch (error: any) {
+      setError(error.message || 'Failed to assign driver');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleConfirmVehicleAssignment = async () => {
+    if (!selectedDriver || !selectedVehicleId) {
+      setError('Please select a vehicle');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setError('');
+      setSuccess('');
+
+      // Update driver with vehicle assignment
+      const response: any = await apiClient.updateDriver(selectedDriver._id, {
+        vehicleAssigned: selectedVehicleId,
+        status: 'available', // Driver stays available until assigned to a delivery
+      });
+
+      if (response.success) {
+        // Update vehicle status
+        await apiClient.updateVehicle(selectedVehicleId, {
+          currentDriver: selectedDriver._id,
+          status: 'active', // Vehicle becomes active when assigned
+        });
+
+        setSuccess(`Vehicle assigned to ${selectedDriver.name} successfully!`);
+        setShowAssignVehicleDialog(false);
+        setSelectedDriver(null);
+        setSelectedVehicleId('');
+        
+        const currentUser = auth.getCurrentUser();
+        if (currentUser) {
+          await fetchFleetData(currentUser.id);
+        }
+      } else {
+        setError(response.message || 'Failed to assign vehicle');
+      }
+    } catch (error: any) {
+      setError(error.message || 'Failed to assign vehicle');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleViewDeliveries = () => {
+    router.push('/distributor/routes');
   };
 
   const filteredVehicles = vehicles.filter(vehicle =>
@@ -363,15 +598,13 @@ export default function DistributorFleetPage() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" />
-                  Fleet Utilization
+                  <Users className="h-4 w-4" />
+                  Available Drivers
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-gray-900">
-                  {vehicleStats.total > 0 ? Math.round((vehicleStats.active / vehicleStats.total) * 100) : 0}%
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Vehicles in use</p>
+                <div className="text-2xl font-bold text-purple-600">{driverStats.available}</div>
+                <p className="text-xs text-gray-500 mt-1">Ready for assignment</p>
               </CardContent>
             </Card>
           </div>
@@ -438,7 +671,12 @@ export default function DistributorFleetPage() {
                             {vehicle.currentDriver && (
                               <div className="flex items-center gap-2 text-gray-600">
                                 <Users className="h-4 w-4" />
-                                <span>{vehicle.currentDriver}</span>
+                                <span>
+                                  {(() => {
+                                    const driver = drivers.find(d => d._id === vehicle.currentDriver);
+                                    return driver ? `${driver.name} (${driver.phone})` : vehicle.currentDriver;
+                                  })()}
+                                </span>
                               </div>
                             )}
                             <div className="flex items-center gap-2 text-gray-600">
@@ -501,18 +739,46 @@ export default function DistributorFleetPage() {
 
                         {/* Right: Actions */}
                         <div className="flex flex-col gap-2 lg:w-40">
-                          <Button variant="outline" size="sm">
+                          <Button variant="outline" size="sm" onClick={handleViewDeliveries}>
                             <MapPin className="h-4 w-4 mr-2" />
-                            Track
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Calendar className="h-4 w-4 mr-2" />
-                            Schedule
+                            View Deliveries
                           </Button>
                           {vehicle.status === 'available' && (
-                            <Button size="sm">
+                            <Button size="sm" onClick={() => handleAssignDriverToVehicle(vehicle)}>
                               <Users className="h-4 w-4 mr-2" />
                               Assign Driver
+                            </Button>
+                          )}
+                          {vehicle.status === 'active' && vehicle.currentDriver && (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={async () => {
+                                // Unassign driver
+                                try {
+                                  const driver = drivers.find(d => d._id === vehicle.currentDriver);
+                                  if (driver) {
+                                    await apiClient.updateDriver(driver._id, {
+                                      vehicleAssigned: '',
+                                      status: 'off_duty',
+                                    });
+                                  }
+                                  await apiClient.updateVehicle(vehicle._id, {
+                                    currentDriver: '',
+                                    status: 'available',
+                                  });
+                                  const currentUser = auth.getCurrentUser();
+                                  if (currentUser) {
+                                    await fetchFleetData(currentUser.id);
+                                  }
+                                  setSuccess('Driver unassigned successfully');
+                                } catch (error: any) {
+                                  setError('Failed to unassign driver');
+                                }
+                              }}
+                            >
+                              <Users className="h-4 w-4 mr-2" />
+                              Unassign Driver
                             </Button>
                           )}
                         </div>
@@ -571,7 +837,12 @@ export default function DistributorFleetPage() {
                             {driver.vehicleAssigned && (
                               <div className="flex items-center gap-2 text-gray-600">
                                 <Truck className="h-4 w-4" />
-                                <span>Assigned: {driver.vehicleAssigned}</span>
+                                <span>
+                                  Assigned: {(() => {
+                                    const vehicle = vehicles.find(v => v._id === driver.vehicleAssigned);
+                                    return vehicle ? `${vehicle.make} ${vehicle.model} (${vehicle.licensePlate})` : driver.vehicleAssigned;
+                                  })()}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -597,19 +868,68 @@ export default function DistributorFleetPage() {
 
                         {/* Right: Actions */}
                         <div className="flex flex-col gap-2 lg:w-40">
-                          <Button variant="outline" size="sm">
-                            <Phone className="h-4 w-4 mr-2" />
-                            Call
+                          <Button variant="outline" size="sm" onClick={handleViewDeliveries}>
+                            <MapPin className="h-4 w-4 mr-2" />
+                            View Deliveries
                           </Button>
-                          <Button variant="outline" size="sm">
-                            <Calendar className="h-4 w-4 mr-2" />
-                            Schedule
+                          
+                          {/* Status Update Button */}
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleUpdateDriverStatus(driver)}
+                            disabled={isDriverLocked(driver) && (driver.status === 'scheduled' || driver.status === 'on_route')}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Update Status
                           </Button>
-                          {driver.status === 'off_duty' && (
-                            <Button size="sm">
+                          
+                          {driver.status === 'available' && (
+                            <Button size="sm" onClick={() => handleAssignVehicleToDriver(driver)}>
                               <Truck className="h-4 w-4 mr-2" />
                               Assign Vehicle
                             </Button>
+                          )}
+                          
+                          {driver.status === 'scheduled' && driver.vehicleAssigned && !isDriverLocked(driver) && (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={async () => {
+                                // Unassign vehicle
+                                try {
+                                  const vehicle = vehicles.find(v => v._id === driver.vehicleAssigned);
+                                  if (vehicle) {
+                                    await apiClient.updateVehicle(vehicle._id, {
+                                      currentDriver: '',
+                                      status: 'available',
+                                    });
+                                  }
+                                  await apiClient.updateDriver(driver._id, {
+                                    vehicleAssigned: '',
+                                    status: 'available', // Set to available when unassigned
+                                  });
+                                  const currentUser = auth.getCurrentUser();
+                                  if (currentUser) {
+                                    await fetchFleetData(currentUser.id);
+                                    await fetchActiveDeliveries(currentUser.id);
+                                  }
+                                  setSuccess('Vehicle unassigned successfully');
+                                } catch (error: any) {
+                                  setError('Failed to unassign vehicle');
+                                }
+                              }}
+                            >
+                              <Truck className="h-4 w-4 mr-2" />
+                              Unassign Vehicle
+                            </Button>
+                          )}
+                          
+                          {isDriverLocked(driver) && (driver.status === 'scheduled' || driver.status === 'on_route') && (
+                            <div className="text-xs text-yellow-700 bg-yellow-50 p-2 rounded">
+                              <AlertTriangle className="h-3 w-3 inline mr-1" />
+                              Locked on delivery
+                            </div>
                           )}
                         </div>
                       </div>
@@ -793,6 +1113,257 @@ export default function DistributorFleetPage() {
                 <>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Driver
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Driver to Vehicle Dialog */}
+      <Dialog open={showAssignDriverDialog} onOpenChange={setShowAssignDriverDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Assign Driver to Vehicle</DialogTitle>
+            <DialogDescription>
+              Select a driver to assign to {selectedVehicle?.make} {selectedVehicle?.model} ({selectedVehicle?.licensePlate})
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="driver-select">Driver *</Label>
+              <Select value={selectedDriverId} onValueChange={setSelectedDriverId}>
+                <SelectTrigger id="driver-select">
+                  <SelectValue placeholder="Select a driver" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableDrivers.length === 0 ? (
+                    <SelectItem value="none" disabled>No available drivers</SelectItem>
+                  ) : (
+                    availableDrivers.map((driver) => (
+                      <SelectItem key={driver._id} value={driver._id}>
+                        {driver.name} - {driver.phone} ({driver.deliveriesCompleted} deliveries)
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedVehicle && (
+              <div className="pt-2 border-t">
+                <p className="text-sm text-gray-600">
+                  <strong>Vehicle:</strong> {selectedVehicle.make} {selectedVehicle.model}
+                </p>
+                <p className="text-sm text-gray-600">
+                  <strong>License Plate:</strong> {selectedVehicle.licensePlate}
+                </p>
+                <p className="text-sm text-gray-600">
+                  <strong>Capacity:</strong> {selectedVehicle.capacity}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAssignDriverDialog(false);
+                setSelectedVehicle(null);
+                setSelectedDriverId('');
+              }}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmDriverAssignment}
+              disabled={!selectedDriverId || isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Assigning...
+                </>
+              ) : (
+                <>
+                  <Users className="h-4 w-4 mr-2" />
+                  Assign Driver
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Vehicle to Driver Dialog */}
+      <Dialog open={showAssignVehicleDialog} onOpenChange={setShowAssignVehicleDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Assign Vehicle to Driver</DialogTitle>
+            <DialogDescription>
+              Select a vehicle to assign to {selectedDriver?.name}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="vehicle-select">Vehicle *</Label>
+              <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+                <SelectTrigger id="vehicle-select">
+                  <SelectValue placeholder="Select a vehicle" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableVehicles.length === 0 ? (
+                    <SelectItem value="none" disabled>No available vehicles</SelectItem>
+                  ) : (
+                    availableVehicles.map((vehicle) => (
+                      <SelectItem key={vehicle._id} value={vehicle._id}>
+                        {vehicle.make} {vehicle.model} ({vehicle.licensePlate}) - {vehicle.capacity}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedDriver && (
+              <div className="pt-2 border-t">
+                <p className="text-sm text-gray-600">
+                  <strong>Driver:</strong> {selectedDriver.name}
+                </p>
+                <p className="text-sm text-gray-600">
+                  <strong>Phone:</strong> {selectedDriver.phone}
+                </p>
+                <p className="text-sm text-gray-600">
+                  <strong>Completed Deliveries:</strong> {selectedDriver.deliveriesCompleted}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAssignVehicleDialog(false);
+                setSelectedDriver(null);
+                setSelectedVehicleId('');
+              }}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmVehicleAssignment}
+              disabled={!selectedVehicleId || isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Assigning...
+                </>
+              ) : (
+                <>
+                  <Truck className="h-4 w-4 mr-2" />
+                  Assign Vehicle
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Update Driver Status Dialog */}
+      <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Update Driver Status</DialogTitle>
+            <DialogDescription>
+              Change status for {selectedDriverForStatus?.name}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {selectedDriverForStatus && isDriverLocked(selectedDriverForStatus) && (selectedDriverForStatus.status === 'scheduled' || selectedDriverForStatus.status === 'on_route') && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-yellow-800">
+                  <AlertTriangle className="h-4 w-4" />
+                  <p className="text-sm font-medium">Driver is locked on an active delivery</p>
+                </div>
+                <p className="text-xs text-yellow-700 mt-1">Cannot change status until delivery is completed</p>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="status-select">Status *</Label>
+              <Select value={newDriverStatus} onValueChange={setNewDriverStatus}>
+                <SelectTrigger id="status-select">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="available">Available</SelectItem>
+                  <SelectItem value="off_duty">Off Duty</SelectItem>
+                  <SelectItem 
+                    value="scheduled" 
+                    disabled={selectedDriverForStatus ? isDriverLocked(selectedDriverForStatus) && (selectedDriverForStatus.status === 'scheduled' || selectedDriverForStatus.status === 'on_route') : false}
+                  >
+                    Scheduled
+                  </SelectItem>
+                  <SelectItem 
+                    value="on_route" 
+                    disabled={selectedDriverForStatus ? isDriverLocked(selectedDriverForStatus) && (selectedDriverForStatus.status === 'scheduled' || selectedDriverForStatus.status === 'on_route') : false}
+                  >
+                    On Route
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedDriverForStatus && (
+              <div className="pt-2 border-t">
+                <p className="text-sm text-gray-600">
+                  <strong>Current Status:</strong> {selectedDriverForStatus.status}
+                </p>
+                {selectedDriverForStatus.vehicleAssigned && (
+                  <p className="text-sm text-gray-600">
+                    <strong>Vehicle:</strong> {(() => {
+                      const vehicle = vehicles.find(v => v._id === selectedDriverForStatus.vehicleAssigned);
+                      return vehicle ? `${vehicle.make} ${vehicle.model}` : 'N/A';
+                    })()}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowStatusDialog(false);
+                setSelectedDriverForStatus(null);
+                setNewDriverStatus('');
+              }}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmStatusUpdate}
+              disabled={!newDriverStatus || newDriverStatus === selectedDriverForStatus?.status || isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Update Status
                 </>
               )}
             </Button>

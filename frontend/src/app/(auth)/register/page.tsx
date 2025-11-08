@@ -126,7 +126,7 @@ export default function RegisterPage() {
       
       // Small delay to ensure state updates, then redirect
       setTimeout(() => {
-        router.push(`/${user.role}`);
+      router.push(`/${user.role}`);
       }, 100);
     } catch (err: any) {
       // Display error in UI
@@ -162,7 +162,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 flex items-center justify-center p-4">
         <div className="w-full max-w-2xl">
         <Card className="shadow-xl">
           <CardHeader className="text-center pb-4">
@@ -539,7 +539,7 @@ export default function RegisterPage() {
             </form>
           </CardContent>
         </Card>
-        </div>
+      </div>
       </div>
   );
 }

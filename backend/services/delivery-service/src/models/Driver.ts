@@ -5,7 +5,7 @@ export interface IDriver extends Document {
   name: string;
   phone: string;
   email: string;
-  status: 'on_route' | 'scheduled' | 'off_duty';
+  status: 'on_route' | 'scheduled' | 'off_duty' | 'available';
   vehicleAssigned?: string;
   licensedSince: string;
   deliveriesCompleted: number;
@@ -35,7 +35,7 @@ const DriverSchema = new Schema<IDriver>(
     },
     status: {
       type: String,
-      enum: ['on_route', 'scheduled', 'off_duty'],
+      enum: ['on_route', 'scheduled', 'off_duty', 'available'],
       default: 'off_duty',
     },
     vehicleAssigned: String,

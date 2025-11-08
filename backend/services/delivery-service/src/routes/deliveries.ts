@@ -123,15 +123,19 @@ router.post('/', async (req: Request, res: Response) => {
         : deliveryData.route.delivery.restaurantId;
     }
     
-    // Ensure location objects have lat and lng as numbers
-    if (deliveryData.route?.pickup?.location) {
+    // Ensure location objects have lat and lng as numbers (create if missing)
+    if (!deliveryData.route?.pickup?.location) {
+      deliveryData.route.pickup.location = { lat: 0, lng: 0 };
+    } else {
       deliveryData.route.pickup.location = {
         lat: Number(deliveryData.route.pickup.location.lat) || 0,
         lng: Number(deliveryData.route.pickup.location.lng) || 0,
       };
     }
     
-    if (deliveryData.route?.delivery?.location) {
+    if (!deliveryData.route?.delivery?.location) {
+      deliveryData.route.delivery.location = { lat: 0, lng: 0 };
+    } else {
       deliveryData.route.delivery.location = {
         lat: Number(deliveryData.route.delivery.location.lat) || 0,
         lng: Number(deliveryData.route.delivery.location.lng) || 0,
@@ -179,9 +183,10 @@ router.post('/', async (req: Request, res: Response) => {
 // Update delivery status
 router.patch('/:id/status', async (req: Request, res: Response) => {
   try {
-    const { status, note, location } = req.body;
+    const { status, note, location, distributorId, vehicleId, driverId, vehicleInfo, driverInfo } = req.body;
 
     console.log(`[Delivery-Service] PATCH /api/deliveries/${req.params.id}/status - Status: ${status}`);
+    console.log(`[Delivery-Service] Request body:`, { status, note, location, distributorId, vehicleId, driverId });
 
     if (!Object.values(DeliveryStatus).includes(status)) {
       return res.status(400).json({
@@ -201,6 +206,31 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     }
 
     console.log(`[Delivery-Service] Updating delivery ${delivery._id} (order ${delivery.orderNumber}) from ${delivery.status} to ${status}`);
+    
+    // Update distributorId if provided (when distributor accepts)
+    if (distributorId && mongoose.Types.ObjectId.isValid(distributorId)) {
+      delivery.distributorId = new mongoose.Types.ObjectId(distributorId);
+      console.log(`[Delivery-Service] Assigned distributor: ${distributorId}`);
+    }
+    
+    // Update vehicle info if provided
+    if (vehicleInfo && vehicleInfo.type && vehicleInfo.plateNumber) {
+      delivery.vehicleInfo = {
+        type: vehicleInfo.type,
+        plateNumber: vehicleInfo.plateNumber,
+      };
+      console.log(`[Delivery-Service] Assigned vehicle: ${vehicleInfo.type} (${vehicleInfo.plateNumber})`);
+    }
+    
+    // Update driver info if provided
+    if (driverInfo && driverInfo.name) {
+      delivery.driverName = driverInfo.name;
+      if (driverInfo.phone) {
+        delivery.driverPhone = driverInfo.phone;
+      }
+      console.log(`[Delivery-Service] Assigned driver: ${driverInfo.name}`);
+    }
+    
     delivery.status = status;
 
     // Update location if provided

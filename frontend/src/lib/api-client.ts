@@ -304,10 +304,29 @@ class ApiClient {
     });
   }
 
-  async updateDeliveryStatus(id: string, status: string, note?: string, location?: any) {
+  async updateDeliveryStatus(
+    id: string, 
+    status: string, 
+    note?: string, 
+    location?: any, 
+    distributorId?: string,
+    vehicleId?: string,
+    driverId?: string,
+    vehicleInfo?: { type: string; plateNumber: string },
+    driverInfo?: { name: string; phone: string }
+  ) {
     return this.request(`/api/deliveries/${id}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ status, note, location }),
+      body: JSON.stringify({ 
+        status, 
+        note, 
+        location, 
+        distributorId,
+        vehicleId,
+        driverId,
+        vehicleInfo,
+        driverInfo,
+      }),
     });
   }
 
