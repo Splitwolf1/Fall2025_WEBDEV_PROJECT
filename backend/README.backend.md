@@ -117,9 +117,19 @@ This backend consists of **7 microservices** + **1 API Gateway**, communicating 
 ### Prerequisites
 
 - **Node.js** 20+ (LTS)
-- **Docker** & **Docker Compose**
+- **Docker Desktop** (must be installed and running)
+- **Docker Compose** (included with Docker Desktop)
 - **MongoDB** (via Docker)
 - **RabbitMQ** (via Docker)
+
+### ⚠️ IMPORTANT: Start Docker Desktop First!
+
+**Before running any Docker commands, make sure Docker Desktop is running!**
+
+1. **Open Docker Desktop** application on your computer
+2. Wait for Docker Desktop to fully start (you'll see "Docker Desktop is running" in the system tray)
+3. Verify Docker is running by checking the Docker icon in your system tray/menu bar
+4. Then proceed with the commands below
 
 ### Option 1: Docker Compose (Recommended)
 
