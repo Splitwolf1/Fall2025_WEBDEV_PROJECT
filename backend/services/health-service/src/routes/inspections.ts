@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Inspection, { InspectionResult } from '../models/Inspection';
 
 const router = express.Router();

@@ -1,0 +1,17 @@
+{
+  "name": "backend-shared",
+  "version": "1.0.0",
+  "description": "Shared utilities for backend services",
+  "private": true,
+  "dependencies": {
+    "consul": "^1.2.0",
+    "amqplib": "^0.10.3",
+    "mongoose": "^8.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "@types/amqplib": "^0.10.4",
+    "typescript": "^5.3.3"
+  }
+}
+
