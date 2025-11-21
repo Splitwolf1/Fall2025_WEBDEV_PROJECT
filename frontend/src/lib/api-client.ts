@@ -132,8 +132,8 @@ class ApiClient {
     role: string;
     profile: any;
     [key: string]: any;
-  }) {
-    return this.request('/api/auth/register', {
+  }): Promise<{ success: boolean; user?: any; token?: string; message?: string }> {
+    return this.request<{ success: boolean; user?: any; token?: string; message?: string }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData),
     });
@@ -159,12 +159,12 @@ class ApiClient {
     this.clearToken();
   }
 
-  async getCurrentUser() {
-    return this.request('/api/auth/me');
+  async getCurrentUser(): Promise<{ success: boolean; user?: any; message?: string }> {
+    return this.request<{ success: boolean; user?: any; message?: string }>('/api/auth/me');
   }
 
-  async updateProfile(updates: any) {
-    return this.request('/api/auth/profile', {
+  async updateProfile(updates: any): Promise<{ success: boolean; user?: any; message?: string }> {
+    return this.request<{ success: boolean; user?: any; message?: string }>('/api/auth/profile', {
       method: 'PATCH',
       body: JSON.stringify(updates),
     });

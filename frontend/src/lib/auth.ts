@@ -103,7 +103,7 @@ export const auth = {
   }): Promise<User> {
     try {
       console.log('[Auth] Starting registration...', { email: userData.email, role: userData.role });
-      const response = await apiClient.register(userData);
+      const response: { success: boolean; user?: any; token?: string; message?: string } = await apiClient.register(userData);
       console.log('[Auth] Registration response received:', { success: response.success, hasUser: !!response.user, hasToken: !!response.token });
 
       if (response.success && response.user && response.token) {
@@ -186,7 +186,7 @@ export const auth = {
   // Fetch current user from backend
   async fetchCurrentUser(): Promise<User | null> {
     try {
-      const response = await apiClient.getCurrentUser();
+      const response: { success: boolean; user?: any; message?: string } = await apiClient.getCurrentUser();
 
       if (response.success && response.user) {
         const user: User = {
@@ -227,7 +227,7 @@ export const auth = {
   // Update user profile
   async updateProfile(updates: any): Promise<User | null> {
     try {
-      const response = await apiClient.updateProfile(updates);
+      const response: { success: boolean; user?: any; message?: string } = await apiClient.updateProfile(updates);
 
       if (response.success && response.user) {
         const user: User = {

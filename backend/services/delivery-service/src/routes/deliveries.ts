@@ -22,15 +22,17 @@ router.get('/', async (req: Request, res: Response) => {
 
     if (distributorId) {
       // Convert string to ObjectId if needed
-      query.distributorId = mongoose.Types.ObjectId.isValid(distributorId) 
-        ? new mongoose.Types.ObjectId(distributorId) 
-        : distributorId;
+      const distributorIdStr = typeof distributorId === 'string' ? distributorId : String(distributorId);
+      query.distributorId = mongoose.Types.ObjectId.isValid(distributorIdStr) 
+        ? new mongoose.Types.ObjectId(distributorIdStr) 
+        : distributorIdStr;
     }
     if (orderId) {
       // Convert string to ObjectId if needed
-      query.orderId = mongoose.Types.ObjectId.isValid(orderId) 
-        ? new mongoose.Types.ObjectId(orderId) 
-        : orderId;
+      const orderIdStr = typeof orderId === 'string' ? orderId : String(orderId);
+      query.orderId = mongoose.Types.ObjectId.isValid(orderIdStr) 
+        ? new mongoose.Types.ObjectId(orderIdStr) 
+        : orderIdStr;
     }
     if (status) query.status = status;
 
@@ -208,8 +210,11 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     console.log(`[Delivery-Service] Updating delivery ${delivery._id} (order ${delivery.orderNumber}) from ${delivery.status} to ${status}`);
     
     // Update distributorId if provided (when distributor accepts)
-    if (distributorId && mongoose.Types.ObjectId.isValid(distributorId)) {
-      delivery.distributorId = new mongoose.Types.ObjectId(distributorId);
+    if (distributorId) {
+      const distributorIdStr = typeof distributorId === 'string' ? distributorId : String(distributorId);
+      if (mongoose.Types.ObjectId.isValid(distributorIdStr)) {
+        delivery.distributorId = new mongoose.Types.ObjectId(distributorIdStr);
+      }
       console.log(`[Delivery-Service] Assigned distributor: ${distributorId}`);
     }
     
@@ -315,7 +320,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
         title: 'Delivery Status Updated',
         message: `Delivery ${delivery.orderNumber} status changed to ${status}`,
         data: {
-          deliveryId: delivery._id.toString(),
+          deliveryId: String(delivery._id),
           orderId: delivery.orderId.toString(),
           orderNumber: delivery.orderNumber,
           status: status,
@@ -344,7 +349,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
           title: 'Delivery Update',
           message: farmerMessage,
           data: {
-            deliveryId: delivery._id.toString(),
+            deliveryId: String(delivery._id),
             orderId: delivery.orderId.toString(),
             orderNumber: delivery.orderNumber,
             status: status,
@@ -374,7 +379,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
           title: 'Delivery Update',
           message: restaurantMessage,
           data: {
-            deliveryId: delivery._id.toString(),
+            deliveryId: String(delivery._id),
             orderId: delivery.orderId.toString(),
             orderNumber: delivery.orderNumber,
             status: status,

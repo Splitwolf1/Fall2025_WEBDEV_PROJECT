@@ -129,7 +129,7 @@ const OrderSchema = new Schema<IOrder>(
 );
 
 // Auto-generate order number
-OrderSchema.pre('save', async function (next) {
+OrderSchema.pre('save', async function (this: IOrder & Document, next: () => void) {
   if (!this.orderNumber) {
     const count = await mongoose.model('Order').countDocuments();
     this.orderNumber = `ORD-${Date.now()}-${String(count + 1).padStart(4, '0')}`;

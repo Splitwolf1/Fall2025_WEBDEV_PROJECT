@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export interface IVehicle extends Document {
+export interface IVehicle extends Omit<Document, 'model'> {
   distributorId: mongoose.Types.ObjectId;
   name: string;
   make: string;
