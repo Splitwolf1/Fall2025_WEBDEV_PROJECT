@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import User, { UserRole } from '../models/User';
 import { authenticateToken } from '../middleware/auth';
 
@@ -54,10 +54,12 @@ router.post('/register', async (req: Request, res: Response) => {
     await user.save();
 
     // Generate token
+    const jwtSecret: string = process.env.JWT_SECRET || 'secret';
+    const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
     const token = jwt.sign(
       { userId: user._id, role: user.role },
-      process.env.JWT_SECRET || 'secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      jwtSecret,
+      { expiresIn } as SignOptions
     );
 
     console.log('[User-Service] Registration successful, sending response');
@@ -148,10 +150,12 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     // Generate token
+    const jwtSecret: string = process.env.JWT_SECRET || 'secret';
+    const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
     const token = jwt.sign(
       { userId: user._id, role: user.role },
-      process.env.JWT_SECRET || 'secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      jwtSecret,
+      { expiresIn } as SignOptions
     );
 
     console.log('[User-Service] Login successful, sending response');

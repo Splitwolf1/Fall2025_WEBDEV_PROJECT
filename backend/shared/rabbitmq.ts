@@ -1,8 +1,9 @@
-import amqp, { Connection, Channel, ConsumeMessage } from 'amqplib';
+import { connect, Connection, Channel, ConsumeMessage, ChannelModel } from 'amqplib';
 
 export class RabbitMQClient {
   private connection: Connection | null = null;
   private channel: Channel | null = null;
+  private channelModel: ChannelModel | null = null;
   private url: string;
 
   constructor(url?: string) {
@@ -11,8 +12,9 @@ export class RabbitMQClient {
 
   async connect(): Promise<void> {
     try {
-      this.connection = await amqp.connect(this.url);
-      this.channel = await this.connection.createChannel();
+      this.channelModel = await connect(this.url);
+      this.connection = this.channelModel.connection;
+      this.channel = await this.channelModel.createChannel();
       console.log('✅ RabbitMQ connected');
 
       // Handle connection errors
@@ -92,7 +94,7 @@ export class RabbitMQClient {
   async close(): Promise<void> {
     try {
       await this.channel?.close();
-      await this.connection?.close();
+      await this.channelModel?.close();
       console.log('✅ RabbitMQ connection closed');
     } catch (error) {
       console.error('❌ Error closing RabbitMQ connection:', error);
