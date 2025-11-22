@@ -1,0 +1,21 @@
+{
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.preferences.includePackageJsonAutoImports": "on",
+
+  // Suppress specific TypeScript errors for shared module imports
+  "typescript.tsserver.experimental.enableProjectDiagnostics": false,
+
+  // Files to exclude from TypeScript checking
+  "typescript.tsserver.watchOptions": {
+    "excludeDirectories": ["**/node_modules", "**/dist"]
+  },
+
+  // ESLint configuration
+  "eslint.workingDirectories": [
+    "./backend",
+    "./frontend"
+  ],
+
+  // Don't show lint errors for shared imports (they work in Docker)
+  "problems.showCurrentInPreferredLocation": true
+}

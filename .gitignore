@@ -2,6 +2,9 @@
 node_modules/
 **/node_modules/
 
+# Shared modules (copied to services, source is backend/shared)
+backend/services/*/shared/
+
 # Environment variables
 .env
 .env.local
@@ -29,10 +32,10 @@ Thumbs.db
 *~
 
 # IDE
-.vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
+# .vscode/ - keeping VSCode settings for shared config
 
 # Docker
 .dockerignore
