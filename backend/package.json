@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Shared utilities for backend services",
   "private": true,
+  "scripts": {
+    "postinstall": "node sync-shared.js",
+    "sync": "node sync-shared.js"
+  },
   "dependencies": {
     "consul": "^1.2.0",
     "amqplib": "^0.10.3",

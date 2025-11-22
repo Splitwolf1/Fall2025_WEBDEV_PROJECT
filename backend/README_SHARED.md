@@ -2,6 +2,16 @@
 
 This directory contains shared TypeScript modules used across all microservices.
 
+## 🚀 Quick Start (New Laptop Setup)
+
+After cloning the repo on a new laptop:
+```bash
+cd backend
+npm install   # This automatically syncs shared files to all services
+```
+
+That's it! The shared files will be automatically copied to each service.
+
 ## Files
 
 - **`rabbitmq.ts`** - RabbitMQ client for message queue communication
@@ -24,23 +34,40 @@ This approach ensures:
 
 ## Updating Shared Modules
 
-When you modify any file in `backend/shared/`, run the sync script:
+When you modify any file in `backend/shared/`, the changes are **automatically synced** to all services.
 
-**Windows:**
+### Automatic Sync (Recommended)
+
+The shared files are automatically synced when you:
+```bash
+cd backend
+npm install
+```
+
+### Manual Sync
+
+You can also manually trigger a sync:
+
+**Using npm:**
+```bash
+cd backend
+npm run sync
+```
+
+**Windows (batch script):**
 ```bash
 cd backend
 sync-shared.bat
 ```
 
-**Linux/Mac:**
+**Linux/Mac (shell script):**
 ```bash
 cd backend
 chmod +x sync-shared.sh
 ./sync-shared.sh
 ```
 
-**Manual sync:**
-If you prefer, you can manually copy:
+**Manual copy:**
 ```bash
 cp backend/shared/*.ts backend/services/[SERVICE-NAME]/shared/
 ```
