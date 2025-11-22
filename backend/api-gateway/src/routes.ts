@@ -147,6 +147,51 @@ router.use(
   })
 );
 
+// Ratings Service routes (handled by order-service)
+router.use(
+  '/api/ratings',
+  authenticateToken,
+  requireAuth,
+  apiLimiter,
+  createProxyMiddleware({
+    target: ORDER_SERVICE,
+    changeOrigin: true,
+    pathRewrite: {
+      '^/api/ratings': '/api/ratings',
+    },
+    timeout: 30000,
+    proxyTimeout: 30000,
+    onProxyReq: (proxyReq, req, res) => {
+      console.log(`[Proxy] ${req.method} ${req.path} -> ${ORDER_SERVICE}${req.path}`);
+      
+      // If body was parsed by express.json(), re-stringify it for forwarding
+      if (req.body && Object.keys(req.body).length > 0) {
+        const bodyString = JSON.stringify(req.body);
+        proxyReq.setHeader('Content-Type', 'application/json');
+        proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyString));
+        proxyReq.write(bodyString);
+      }
+    },
+    onProxyRes: (proxyRes, req, res) => {
+      console.log(`[Proxy] Response: ${proxyRes.statusCode} for ${req.method} ${req.path}`);
+    },
+    onError: (err, req, res) => {
+      console.error('[Proxy] Ratings proxy error:', {
+        message: err.message,
+        code: (err as any).code,
+        path: req.path,
+      });
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: 'Ratings service unavailable. Please try again.',
+          error: err.message,
+        });
+      }
+    },
+  })
+);
+
 // Delivery Service routes
 router.use(
   '/api/deliveries',

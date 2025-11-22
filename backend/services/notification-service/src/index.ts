@@ -75,10 +75,17 @@ export const sendNotification = (
     data?: any;
   }
 ) => {
-  io.to(`user-${userId}`).emit('notification', {
+  const notificationData = {
+    _id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    userId,
     ...notification,
+    isRead: false,
+    createdAt: new Date().toISOString(),
     timestamp: new Date().toISOString(),
-  });
+  };
+  
+  console.log(`🔔 Sending notification to user-${userId}:`, notificationData);
+  io.to(`user-${userId}`).emit('notification', notificationData);
 };
 
 // Send to all users with specific role

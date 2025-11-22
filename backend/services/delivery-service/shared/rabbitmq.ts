@@ -93,7 +93,12 @@ export class RabbitMQClient {
         if (msg) {
           try {
             const content = JSON.parse(msg.content.toString());
-            await callback(content);
+            const eventType = msg.fields.routingKey;
+            // Include event type in the callback data
+            await callback({
+              type: eventType,
+              ...content
+            });
             this.channel?.ack(msg);
           } catch (error) {
             console.error('❌ Error processing message:', error);

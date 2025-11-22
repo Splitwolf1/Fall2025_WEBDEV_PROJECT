@@ -40,6 +40,7 @@ app.get('/', (req, res) => {
       auth: '/api/auth',
       products: '/api/products',
       orders: '/api/orders',
+      ratings: '/api/ratings',
       deliveries: '/api/deliveries',
       inspections: '/api/inspections',
       notifications: '/api/notify',

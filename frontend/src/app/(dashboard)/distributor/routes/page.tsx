@@ -111,7 +111,7 @@ export default function AvailableDeliveriesPage() {
     try {
       setIsLoading(true);
       // Fetch ONLY deliveries that are ready for pickup (pickup_pending)
-      // Exclude scheduled, picked_up, in_transit, delivered - those appear in Active Deliveries
+      // Exclude scheduled, picked_up, in_transit, delivered - those appear in Deliveries
       const deliveriesResponse: any = await apiClient.getDeliveries({ 
         status: 'pickup_pending',
         limit: '100' 
@@ -258,7 +258,7 @@ export default function AvailableDeliveriesPage() {
         await fetchAvailableDeliveries();
         
         // Show success message
-        alert('Delivery assigned successfully! It will now appear in Active Deliveries.');
+        alert('Delivery assigned successfully! It will now appear in Deliveries.');
         
         // Optionally navigate to active deliveries
         // router.push('/distributor/deliveries');

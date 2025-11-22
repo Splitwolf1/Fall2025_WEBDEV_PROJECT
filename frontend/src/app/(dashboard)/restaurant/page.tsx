@@ -410,7 +410,7 @@ export default function RestaurantDashboard() {
           {/* Active Orders */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Active Deliveries</CardTitle>
+              <CardTitle>Deliveries</CardTitle>
               <Button variant="ghost" size="sm">
                 View All Orders
               </Button>

@@ -408,7 +408,7 @@ export default function DistributorDashboard() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Active Deliveries
+                  Deliveries
                 </CardTitle>
                 <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
                   <Truck className="h-4 w-4 text-blue-600" />

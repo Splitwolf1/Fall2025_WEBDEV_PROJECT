@@ -191,7 +191,7 @@ export default function DistributorDeliveriesPage() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Active Deliveries</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Deliveries</h1>
         <p className="text-gray-600 mt-1">Monitor and manage ongoing delivery routes</p>
       </div>
 

@@ -2,6 +2,8 @@ import express, { Request, Response } from 'express';
 import axios from 'axios';
 import mongoose from 'mongoose';
 import Delivery, { DeliveryStatus } from '../models/Delivery';
+import Driver from '../models/Driver';
+import Vehicle from '../models/Vehicle';
 import { getRabbitMQClient } from '../../shared/rabbitmq';
 
 const router = express.Router();
@@ -412,6 +414,47 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
 
     // Send all notifications in parallel
     await Promise.all(notificationPromises);
+
+    // Auto-unassign driver and vehicle when delivery is completed
+    if (status === DeliveryStatus.DELIVERED && delivery.distributorId) {
+      try {
+        // Find and update driver status to available
+        if (delivery.driverName) {
+          await Driver.updateOne(
+            { 
+              distributorId: delivery.distributorId,
+              name: delivery.driverName,
+              status: { $ne: 'off_duty' } // Only update if not off duty
+            },
+            { 
+              status: 'available',
+              vehicleAssigned: null,
+              $inc: { deliveriesCompleted: 1, deliveriesToday: 1 }
+            }
+          );
+          console.log(`[Delivery-Service] Driver ${delivery.driverName} set to available`);
+        }
+
+        // Find and update vehicle status to available
+        if (delivery.vehicleInfo?.plateNumber) {
+          await Vehicle.updateOne(
+            { 
+              distributorId: delivery.distributorId,
+              licensePlate: delivery.vehicleInfo.plateNumber,
+              status: 'active'
+            },
+            { 
+              status: 'available',
+              currentDriver: null
+            }
+          );
+          console.log(`[Delivery-Service] Vehicle ${delivery.vehicleInfo.plateNumber} set to available`);
+        }
+      } catch (error: any) {
+        console.warn('[Delivery-Service] Failed to auto-unassign driver/vehicle:', error.message);
+        // Non-critical error - don't fail the request
+      }
+    }
 
     res.json({
       success: true,

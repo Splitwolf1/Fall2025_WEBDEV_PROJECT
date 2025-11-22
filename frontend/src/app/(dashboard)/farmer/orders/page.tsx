@@ -23,6 +23,8 @@ import {
   Phone,
   Mail,
   Loader2,
+  Star,
+  StarIcon,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { auth } from '@/lib/auth';
@@ -48,6 +50,15 @@ interface Order {
   status: string;
   deliveryAddress: any;
   notes?: string;
+  distributorId?: string;
+  driverId?: string;
+  driverName?: string;
+  ratings?: {
+    farmerRated: boolean;
+    deliveryRated: boolean;
+    driverRated: boolean;
+    canRate: boolean;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -66,6 +77,13 @@ export default function FarmerOrdersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [user, setUser] = useState<any>(null);
+
+  // Rating state
+  const [showRatingDialog, setShowRatingDialog] = useState(false);
+  const [ratingOrder, setRatingOrder] = useState<Order | null>(null);
+  const [rating, setRating] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
   // Load user and orders
   useEffect(() => {
@@ -180,6 +198,58 @@ export default function FarmerOrdersPage() {
 
     const newStatus = actionDialog === 'accept' ? 'confirmed' : 'cancelled';
     handleUpdateOrderStatus(selectedOrder._id, newStatus, actionNote);
+  };
+
+  // Rating functions
+  const openRatingDialog = (order: Order) => {
+    setRatingOrder(order);
+    setRating(0);
+    setRatingComment('');
+    setShowRatingDialog(true);
+  };
+
+  const closeRatingDialog = () => {
+    setShowRatingDialog(false);
+    setRatingOrder(null);
+    setRating(0);
+    setRatingComment('');
+    setIsSubmittingRating(false);
+  };
+
+  const submitRating = async () => {
+    if (!ratingOrder || rating === 0) return;
+
+    if (!user) return;
+
+    try {
+      setIsSubmittingRating(true);
+
+      const ratingData = {
+        orderId: ratingOrder._id,
+        raterId: user.id,
+        ratedUserId: ratingOrder.driverId || 'unknown',
+        type: 'driver' as const,
+        rating,
+        comment: ratingComment.trim(),
+      };
+
+      const response = await apiClient.createRating(ratingData);
+      
+      if (response.success) {
+        // Close dialog
+        closeRatingDialog();
+        
+        // Refresh orders to update rating status
+        fetchOrders(user.id);
+        
+        // Show success feedback (you could add a toast here)
+      }
+    } catch (error: any) {
+      console.error('Error submitting rating:', error);
+      alert(error.message || 'Failed to submit rating');
+    } finally {
+      setIsSubmittingRating(false);
+    }
   };
 
   return (
@@ -367,6 +437,17 @@ export default function FarmerOrdersPage() {
                             Mark Ready for Pickup
                           </Button>
                         )}
+                        {(order.status === 'delivered' || order.status === 'completed') && order.driverId && !order.ratings?.driverRated && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                            onClick={() => openRatingDialog(order)}
+                          >
+                            <Star className="h-4 w-4 mr-2" />
+                            Rate Driver
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -526,6 +607,73 @@ export default function FarmerOrdersPage() {
               variant={actionDialog === 'reject' ? 'destructive' : 'default'}
             >
               {actionDialog === 'accept' ? 'Confirm Accept' : 'Confirm Reject'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rating Dialog */}
+      <Dialog open={showRatingDialog} onOpenChange={setShowRatingDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rate Driver</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="text-center space-y-2">
+              <p className="text-sm text-gray-600">
+                How was your experience with {ratingOrder?.driverName || 'the driver'} for order {ratingOrder?.orderNumber}?
+              </p>
+              
+              <div className="flex justify-center space-x-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setRating(star)}
+                    className="p-1 hover:scale-110 transition-transform"
+                  >
+                    <StarIcon
+                      className={`h-8 w-8 ${
+                        star <= rating
+                          ? 'fill-yellow-400 text-yellow-400'
+                          : 'text-gray-300'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <label htmlFor="rating-comment" className="text-sm font-medium">
+                Additional Comments (Optional)
+              </label>
+              <Textarea
+                id="rating-comment"
+                placeholder="Share your experience with the driver..."
+                value={ratingComment}
+                onChange={(e) => setRatingComment(e.target.value)}
+                rows={3}
+                className="resize-none"
+                maxLength={500}
+              />
+              <p className="text-xs text-gray-500 text-right">
+                {ratingComment.length}/500 characters
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={closeRatingDialog}>
+              Cancel
+            </Button>
+            <Button
+              onClick={submitRating}
+              disabled={rating === 0 || isSubmittingRating}
+              className="min-w-[100px]"
+            >
+              {isSubmittingRating ? 'Submitting...' : 'Submit Rating'}
             </Button>
           </DialogFooter>
         </DialogContent>
