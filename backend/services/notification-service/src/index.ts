@@ -98,10 +98,16 @@ export const sendRoleNotification = (
     data?: any;
   }
 ) => {
-  io.to(`role-${role}`).emit('notification', {
+  const notificationData = {
+    _id: `role_notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     ...notification,
+    isRead: false,
+    createdAt: new Date().toISOString(),
     timestamp: new Date().toISOString(),
-  });
+  };
+  
+  console.log(`🔔 Sending role notification to role-${role}:`, notificationData);
+  io.to(`role-${role}`).emit('notification', notificationData);
 };
 
 // Broadcast to all connected clients
