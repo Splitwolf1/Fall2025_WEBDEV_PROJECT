@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Product, { ProductCategory } from '../models/Product';
-import { getRabbitMQClient } from '../../../shared/rabbitmq';
+import { getRabbitMQClient } from '../../shared/rabbitmq';
 
 const router = express.Router();
 

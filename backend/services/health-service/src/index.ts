@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import inspectionRoutes from './routes/inspections';
-import { getRabbitMQClient } from '../../../shared/rabbitmq';
+import { getRabbitMQClient } from '../shared/rabbitmq';
 
 dotenv.config();
 

@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import User, { UserRole } from '../models/User';
 import { authenticateToken } from '../middleware/auth';
-import { getRabbitMQClient } from '../../../../shared/rabbitmq';
+import { getRabbitMQClient } from '../../shared/rabbitmq';
 
 const router = express.Router();
 

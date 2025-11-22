@@ -9,8 +9,12 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "shared/*": ["../../shared/*"]
+    }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "../../shared"]
+  "include": ["src/**/*", "../../shared/**/*"],
+  "exclude": ["node_modules", "dist"]
 }
