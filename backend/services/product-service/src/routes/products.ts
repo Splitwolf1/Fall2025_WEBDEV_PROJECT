@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Product, { ProductCategory } from '../models/Product';
+import { getRabbitMQClient } from '../../../shared/rabbitmq';
 
 const router = express.Router();
 
@@ -146,7 +147,21 @@ router.post('/', async (req: Request, res: Response) => {
       product,
     });
 
-    // TODO: Publish product.created event to RabbitMQ
+    // Publish product.created event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'product.created', {
+        productId: product._id,
+        farmerId: product.farmerId,
+        name: product.name,
+        category: product.category,
+        price: product.price,
+        stockQuantity: product.stockQuantity,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to publish product.created event:', error);
+    }
   } catch (error: any) {
     console.error('Create product error:', error);
     
@@ -190,7 +205,18 @@ router.put('/:id', async (req: Request, res: Response) => {
       product,
     });
 
-    // TODO: Publish product.updated event to RabbitMQ
+    // Publish product.updated event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'product.updated', {
+        productId: product._id,
+        farmerId: product.farmerId,
+        updates: Object.keys(req.body),
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to publish product.updated event:', error);
+    }
   } catch (error: any) {
     console.error('Update product error:', error);
     res.status(500).json({
@@ -232,9 +258,27 @@ router.patch('/:id/stock', async (req: Request, res: Response) => {
       product,
     });
 
-    // TODO: Publish product.stock_updated event to RabbitMQ
-    if (quantity === 0) {
-      // TODO: Publish product.out_of_stock event
+    // Publish product.stock_updated event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'product.stock_updated', {
+        productId: product._id,
+        farmerId: product.farmerId,
+        previousQuantity: product.stockQuantity,
+        newQuantity: quantity,
+        timestamp: new Date().toISOString()
+      });
+      
+      if (quantity === 0) {
+        await rabbitmq.publish('farm2table.events', 'product.out_of_stock', {
+          productId: product._id,
+          farmerId: product.farmerId,
+          name: product.name,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('Failed to publish product stock events:', error);
     }
   } catch (error: any) {
     console.error('Update stock error:', error);
@@ -263,7 +307,18 @@ router.delete('/:id', async (req: Request, res: Response) => {
       message: 'Product deleted successfully',
     });
 
-    // TODO: Publish product.deleted event to RabbitMQ
+    // Publish product.deleted event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'product.deleted', {
+        productId: product._id,
+        farmerId: product.farmerId,
+        name: product.name,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to publish product.deleted event:', error);
+    }
   } catch (error: any) {
     console.error('Delete product error:', error);
     res.status(500).json({

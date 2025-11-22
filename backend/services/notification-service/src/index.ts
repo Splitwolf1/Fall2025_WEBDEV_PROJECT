@@ -3,6 +3,7 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { getRabbitMQClient } from '../shared/rabbitmq';
 
 dotenv.config();
 
@@ -157,7 +158,109 @@ const startServer = async () => {
       console.log(`🔌 Socket.io ready for connections`);
     });
 
-    // TODO: Connect to RabbitMQ and listen for events
+    // Connect to RabbitMQ and listen for events
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      console.log('✅ RabbitMQ connected');
+      
+      // Subscribe to all farm2table events
+      await rabbitmq.subscribe(
+        'notification-service-events',
+        'farm2table.events',
+        '*', // Listen to all events
+        async (eventData) => {
+          console.log('📨 Received event:', eventData);
+          
+          // Route events to appropriate notification handlers
+          switch (eventData.type || Object.keys(eventData)[0]) {
+            case 'user.created':
+              sendNotification(eventData.userId, {
+                type: 'welcome',
+                title: 'Welcome to Farm2Table!',
+                message: 'Your account has been created successfully.',
+                data: eventData
+              });
+              break;
+              
+            case 'order.created':
+              // Notify customer and farmer
+              sendNotification(eventData.customerId, {
+                type: 'order',
+                title: 'Order Confirmed',
+                message: `Order ${eventData.orderNumber} has been placed successfully.`,
+                data: eventData
+              });
+              sendNotification(eventData.farmerId, {
+                type: 'order',
+                title: 'New Order Received',
+                message: `You have a new order ${eventData.orderNumber}.`,
+                data: eventData
+              });
+              break;
+              
+            case 'order.status_updated':
+              // Notify customer of status updates
+              sendNotification(eventData.customerId, {
+                type: 'order_update',
+                title: 'Order Status Update',
+                message: `Order ${eventData.orderNumber} is now ${eventData.newStatus.replace('_', ' ')}.`,
+                data: eventData
+              });
+              break;
+              
+            case 'delivery.status_updated':
+              // Notify about delivery updates
+              broadcastNotification({
+                type: 'delivery_update',
+                title: 'Delivery Update',
+                message: `Delivery ${eventData.deliveryNumber} status: ${eventData.newStatus.replace('_', ' ')}.`,
+                data: eventData
+              });
+              break;
+              
+            case 'inspection.scheduled':
+              // Notify inspector and target of scheduled inspection
+              sendNotification(eventData.inspectorId, {
+                type: 'inspection',
+                title: 'Inspection Scheduled',
+                message: `You have a new ${eventData.type} inspection scheduled.`,
+                data: eventData
+              });
+              sendNotification(eventData.targetId, {
+                type: 'inspection',
+                title: 'Inspection Scheduled',
+                message: `A ${eventData.type} inspection has been scheduled for your facility.`,
+                data: eventData
+              });
+              break;
+              
+            case 'compliance.violation':
+              // Notify about compliance violations (critical)
+              sendRoleNotification('inspector', {
+                type: 'violation',
+                title: 'Compliance Violation Detected',
+                message: `Critical violations found during inspection.`,
+                data: eventData
+              });
+              sendNotification(eventData.targetId, {
+                type: 'violation',
+                title: 'Compliance Issue',
+                message: 'Your facility has failed inspection. Please review the violations.',
+                data: eventData
+              });
+              break;
+              
+            default:
+              console.log('⚠️ Unknown event type:', eventData);
+          }
+        }
+      );
+      
+      console.log('📢 Notification service subscribed to all events');
+    } catch (error) {
+      console.error('❌ RabbitMQ connection error:', error);
+    }
+
     // TODO: Register with Consul
   } catch (error) {
     console.error('❌ Failed to start server:', error);

@@ -1,4 +1,14 @@
 import { ChatIntent, extractOrderNumber } from './intents';
+import {
+  getOrderByNumber,
+  getUserOrders,
+  getDeliveryInfo,
+  getDeliveryEstimate,
+  searchProducts,
+  getProductsByCategory,
+  formatOrderStatus,
+  formatDeliveryStatus
+} from './services';
 
 export interface ChatResponse {
   text: string;
@@ -26,41 +36,177 @@ export const generateResponse = async (
     case ChatIntent.TRACK_ORDER:
       const orderNumber = extractOrderNumber(message);
       if (orderNumber) {
-        // TODO: Fetch actual order status from Order Service
-        return {
-          text: `I found your order ${orderNumber}! Let me check its status...
+        try {
+          const order = await getOrderByNumber(orderNumber);
+          if (!order) {
+            return {
+              text: `I couldn't find order ${orderNumber}. Please check the order number and try again. Order numbers usually look like ORD-1234-5678.`,
+              quickReplies: ['Show my recent orders'],
+            };
+          }
 
-**Status**: In Transit 🚚
-**Expected Delivery**: Tomorrow at 2:00 PM
-**Current Location**: Downtown Distribution Center
+          const deliveryInfo = await getDeliveryInfo(orderNumber);
+          const orderStatus = formatOrderStatus(order.status);
+          
+          let statusText = `I found your order ${orderNumber}!\n\n**Status**: ${orderStatus} 📦`;
+          
+          if (deliveryInfo) {
+            const deliveryStatus = formatDeliveryStatus(deliveryInfo.status);
+            statusText += `\n**Delivery Status**: ${deliveryStatus} 🚚`;
+            
+            if (deliveryInfo.estimatedDelivery) {
+              const deliveryDate = new Date(deliveryInfo.estimatedDelivery).toLocaleDateString('en-US', {
+                weekday: 'long',
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit'
+              });
+              statusText += `\n**Expected Delivery**: ${deliveryDate}`;
+            }
+            
+            if (deliveryInfo.currentLocation) {
+              statusText += `\n**Current Location**: ${deliveryInfo.currentLocation}`;
+            }
+          }
 
-Would you like to see the live tracking map?`,
-          quickReplies: ['View map', 'Contact driver', 'Get more details'],
-        };
+          statusText += `\n\nOrder Total: $${order.totalAmount.toFixed(2)}`;
+          
+          return {
+            text: statusText,
+            quickReplies: ['View order details', 'Contact support', 'Track another order'],
+          };
+        } catch (error) {
+          console.error('Error tracking order:', error);
+          return {
+            text: `I'm having trouble accessing the order information right now. Please try again in a moment, or contact our support team for assistance.`,
+            quickReplies: ['Contact support', 'Try again'],
+          };
+        }
+      } else if (userId) {
+        try {
+          const recentOrders = await getUserOrders(userId);
+          if (recentOrders.length === 0) {
+            return {
+              text: "You don't have any recent orders. Would you like to browse our fresh products?",
+              quickReplies: ['Browse products', 'Contact support'],
+            };
+          }
+
+          const orderList = recentOrders.slice(0, 3).map(order => 
+            `• ${order.orderNumber} - ${formatOrderStatus(order.status)} ($${order.totalAmount.toFixed(2)})`
+          ).join('\n');
+
+          return {
+            text: `Here are your recent orders:\n\n${orderList}\n\nWhich order would you like to track? Just tell me the order number.`,
+            quickReplies: recentOrders.slice(0, 2).map(order => `Track ${order.orderNumber}`),
+          };
+        } catch (error) {
+          console.error('Error fetching user orders:', error);
+          return {
+            text: "I can help you track your order! Please provide your order number (e.g., ORD-1234-5678).",
+            quickReplies: ['Contact support'],
+          };
+        }
       } else {
         return {
           text: "I can help you track your order! Please provide your order number (e.g., ORD-1234-5678) or tell me which order you'd like to track.",
-          quickReplies: ['Show my recent orders'],
+          quickReplies: ['Contact support'],
         };
       }
 
     case ChatIntent.DELIVERY_TIME:
-      // TODO: Fetch actual delivery times from Delivery Service
-      return {
-        text: "Most deliveries arrive within **24-48 hours** of order confirmation.\n\n**Standard Delivery**: 1-2 business days\n**Express Delivery**: Same day (if ordered before 10 AM)\n\nWould you like to check a specific order's delivery time?",
-        quickReplies: ['Track an order', 'Browse products'],
-      };
+      try {
+        const deliveryEstimate = await getDeliveryEstimate();
+        return {
+          text: `${deliveryEstimate}\n\n**Standard Delivery**: 1-2 business days\n**Express Delivery**: Same day (if ordered before 10 AM)\n\nWould you like to check a specific order's delivery time?`,
+          quickReplies: ['Track an order', 'Browse products'],
+        };
+      } catch (error) {
+        console.error('Error fetching delivery estimate:', error);
+        return {
+          text: "Most deliveries arrive within **24-48 hours** of order confirmation.\n\n**Standard Delivery**: 1-2 business days\n**Express Delivery**: Same day (if ordered before 10 AM)\n\nWould you like to check a specific order's delivery time?",
+          quickReplies: ['Track an order', 'Browse products'],
+        };
+      }
 
     case ChatIntent.PRODUCT_INQUIRY:
-      // TODO: Search products from Product Service
-      return {
-        text: "I can help you find products! We have:\n\n🥬 **Vegetables** - Fresh, organic greens\n🍎 **Fruits** - Seasonal, locally sourced\n🌿 **Herbs** - Aromatic and fresh\n🥛 **Dairy** - Farm-fresh milk & cheese\n🥚 **Eggs** - Free-range eggs\n\nWhat are you looking for?",
-        quickReplies: [
-          'Show vegetables',
-          'Show fruits',
-          'Show dairy products',
-        ],
-      };
+      try {
+        // Try to extract category or search term from the message
+        const lowerMessage = message.toLowerCase();
+        let category = '';
+        let searchTerm = '';
+
+        if (lowerMessage.includes('vegetable') || lowerMessage.includes('veggie')) {
+          category = 'vegetables';
+        } else if (lowerMessage.includes('fruit')) {
+          category = 'fruits';
+        } else if (lowerMessage.includes('dairy') || lowerMessage.includes('milk') || lowerMessage.includes('cheese')) {
+          category = 'dairy';
+        } else if (lowerMessage.includes('herb')) {
+          category = 'herbs';
+        } else if (lowerMessage.includes('egg')) {
+          category = 'eggs';
+        } else {
+          // Extract potential search term
+          const words = message.split(' ');
+          const productWords = words.filter(word => 
+            !['show', 'find', 'search', 'looking', 'for', 'want', 'need', 'buy'].includes(word.toLowerCase())
+          );
+          searchTerm = productWords.join(' ');
+        }
+
+        let products = [];
+        if (category) {
+          products = await getProductsByCategory(category);
+        } else if (searchTerm) {
+          products = await searchProducts(searchTerm);
+        } else {
+          // Show general categories
+          return {
+            text: "I can help you find products! We have:\n\n🥬 **Vegetables** - Fresh, organic greens\n🍎 **Fruits** - Seasonal, locally sourced\n🌿 **Herbs** - Aromatic and fresh\n🥛 **Dairy** - Farm-fresh milk & cheese\n🥚 **Eggs** - Free-range eggs\n\nWhat are you looking for?",
+            quickReplies: [
+              'Show vegetables',
+              'Show fruits',
+              'Show dairy products',
+            ],
+          };
+        }
+
+        if (products.length === 0) {
+          return {
+            text: `I couldn't find any products matching "${searchTerm || category}". Here are our main categories:\n\n🥬 **Vegetables** - Fresh, organic greens\n🍎 **Fruits** - Seasonal, locally sourced\n🌿 **Herbs** - Aromatic and fresh\n🥛 **Dairy** - Farm-fresh milk & cheese\n🥚 **Eggs** - Free-range eggs`,
+            quickReplies: [
+              'Show vegetables',
+              'Show fruits',
+              'Show dairy products',
+            ],
+          };
+        }
+
+        const productList = products.map(product => 
+          `🌱 **${product.name}** - $${product.price.toFixed(2)}/lb\n${product.description}`
+        ).join('\n\n');
+
+        return {
+          text: `Here are some ${category || 'products'} we have available:\n\n${productList}\n\nWould you like to see more details about any of these?`,
+          quickReplies: [
+            'Browse more products',
+            'Check prices',
+            'Add to cart',
+          ],
+        };
+      } catch (error) {
+        console.error('Error searching products:', error);
+        return {
+          text: "I can help you find products! We have:\n\n🥬 **Vegetables** - Fresh, organic greens\n🍎 **Fruits** - Seasonal, locally sourced\n🌿 **Herbs** - Aromatic and fresh\n🥛 **Dairy** - Farm-fresh milk & cheese\n🥚 **Eggs** - Free-range eggs\n\nWhat are you looking for?",
+          quickReplies: [
+            'Show vegetables',
+            'Show fruits',
+            'Show dairy products',
+          ],
+        };
+      }
 
     case ChatIntent.PRICING:
       return {

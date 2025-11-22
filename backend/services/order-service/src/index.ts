@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import orderRoutes from './routes/orders';
+import { getRabbitMQClient } from '../shared/rabbitmq';
 
 dotenv.config();
 
@@ -59,7 +60,14 @@ const startServer = async () => {
       console.log(`📍 Health check: http://localhost:${PORT}/health`);
     });
 
-    // TODO: Connect to RabbitMQ
+    // Connect to RabbitMQ
+    try {
+      await getRabbitMQClient();
+      console.log('✅ RabbitMQ connected');
+    } catch (error) {
+      console.error('❌ RabbitMQ connection error:', error);
+    }
+
     // TODO: Register with Consul
   } catch (error) {
     console.error('❌ Failed to start server:', error);

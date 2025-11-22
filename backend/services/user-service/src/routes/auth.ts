@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import User, { UserRole } from '../models/User';
 import { authenticateToken } from '../middleware/auth';
+import { getRabbitMQClient } from '../../../../shared/rabbitmq';
 
 const router = express.Router();
 
@@ -78,7 +79,18 @@ router.post('/register', async (req: Request, res: Response) => {
     res.status(201).json(response);
     console.log('[User-Service] Response sent successfully');
 
-    // TODO: Publish user.created event to RabbitMQ
+    // Publish user.created event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'user.created', {
+        userId: user._id,
+        email: user.email,
+        role: user.role,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to publish user.created event:', error);
+    }
   } catch (error: any) {
     console.error('[User-Service] Registration error:', error);
     if (!res.headersSent) {
@@ -178,7 +190,18 @@ router.post('/login', async (req: Request, res: Response) => {
     res.json(response);
     console.log('[User-Service] Response sent successfully');
 
-    // TODO: Publish user.logged_in event to RabbitMQ
+    // Publish user.logged_in event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'user.logged_in', {
+        userId: user._id,
+        email: user.email,
+        role: user.role,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to publish user.logged_in event:', error);
+    }
   } catch (error: any) {
     console.error('[User-Service] Login error:', error);
     if (!res.headersSent) {
@@ -349,7 +372,19 @@ router.patch('/profile', authenticateToken, async (req: Request, res: Response) 
       },
     });
 
-    // TODO: Publish user.updated event to RabbitMQ
+    // Publish user.updated event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'user.updated', {
+        userId: user._id,
+        email: user.email,
+        role: user.role,
+        updates: Object.keys(updates),
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to publish user.updated event:', error);
+    }
   } catch (error: any) {
     console.error('Update profile error:', error);
     res.status(500).json({

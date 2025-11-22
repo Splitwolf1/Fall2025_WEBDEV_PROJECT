@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Inspection, { InspectionResult } from '../models/Inspection';
+import { getRabbitMQClient } from '../../../shared/rabbitmq';
 
 const router = express.Router();
 
@@ -92,7 +93,21 @@ router.post('/', async (req: Request, res: Response) => {
       inspection,
     });
 
-    // TODO: Publish inspection.scheduled event to RabbitMQ
+    // Publish inspection.scheduled event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'inspection.scheduled', {
+        inspectionId: inspection._id,
+        inspectorId: inspection.inspectorId,
+        targetType: inspection.targetType,
+        targetId: inspection.targetId,
+        type: inspection.type,
+        scheduledDate: inspection.scheduledDate,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to publish inspection.scheduled event:', error);
+    }
   } catch (error: any) {
     console.error('Create inspection error:', error);
     res.status(500).json({
@@ -156,9 +171,36 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
       inspection,
     });
 
-    // TODO: Publish inspection.completed event to RabbitMQ
-    if (inspection.result === InspectionResult.FAIL) {
-      // TODO: Publish compliance.violation event
+    // Publish inspection.completed event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'inspection.completed', {
+        inspectionId: inspection._id,
+        inspectorId: inspection.inspectorId,
+        targetType: inspection.targetType,
+        targetId: inspection.targetId,
+        type: inspection.type,
+        result: inspection.result,
+        score: inspection.score,
+        violationsCount: inspection.violations?.length || 0,
+        completedAt: inspection.completedAt,
+        timestamp: new Date().toISOString()
+      });
+      
+      if (inspection.result === InspectionResult.FAIL) {
+        // Publish compliance.violation event for failed inspections
+        await rabbitmq.publish('farm2table.events', 'compliance.violation', {
+          inspectionId: inspection._id,
+          targetType: inspection.targetType,
+          targetId: inspection.targetId,
+          violations: inspection.violations,
+          score: inspection.score,
+          severity: 'critical', // Failed inspection is critical
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('Failed to publish inspection events:', error);
     }
   } catch (error: any) {
     console.error('Complete inspection error:', error);

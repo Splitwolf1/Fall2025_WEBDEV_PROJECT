@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import axios from 'axios';
 import mongoose from 'mongoose';
 import Delivery, { DeliveryStatus } from '../models/Delivery';
+import { getRabbitMQClient } from '../../shared/rabbitmq';
 
 const router = express.Router();
 
@@ -164,7 +165,23 @@ router.post('/', async (req: Request, res: Response) => {
       delivery,
     });
 
-    // TODO: Publish delivery.created event to RabbitMQ
+    // Publish delivery.created event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'delivery.created', {
+        deliveryId: delivery._id,
+        deliveryNumber: delivery.deliveryNumber,
+        orderId: delivery.orderId,
+        distributorId: delivery.distributorId,
+        status: delivery.status,
+        pickupLocation: delivery.pickupLocation,
+        deliveryLocation: delivery.deliveryLocation,
+        estimatedPickupTime: delivery.estimatedPickupTime,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to publish delivery.created event:', error);
+    }
   } catch (error: any) {
     console.error('[Delivery-Service] ❌ Create delivery error:', error);
     console.error('[Delivery-Service] Error details:', {
@@ -402,7 +419,22 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
       delivery,
     });
 
-    // TODO: Publish delivery.status_updated event to RabbitMQ
+    // Publish delivery.status_updated event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'delivery.status_updated', {
+        deliveryId: delivery._id,
+        deliveryNumber: delivery.deliveryNumber,
+        orderId: delivery.orderId,
+        distributorId: delivery.distributorId,
+        previousStatus: delivery.statusHistory[delivery.statusHistory.length - 2]?.status,
+        newStatus: delivery.status,
+        location: req.body.location,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to publish delivery.status_updated event:', error);
+    }
   } catch (error: any) {
     console.error('Update delivery status error:', error);
     res.status(500).json({
@@ -493,7 +525,22 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
       delivery,
     });
 
-    // TODO: Publish delivery.completed event to RabbitMQ
+    // Publish delivery.completed event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'delivery.completed', {
+        deliveryId: delivery._id,
+        deliveryNumber: delivery.deliveryNumber,
+        orderId: delivery.orderId,
+        distributorId: delivery.distributorId,
+        completedAt: delivery.completedAt,
+        proofOfDelivery: delivery.proofOfDelivery,
+        actualDeliveryTime: req.body.actualDeliveryTime,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to publish delivery.completed event:', error);
+    }
   } catch (error: any) {
     console.error('Complete delivery error:', error);
     res.status(500).json({

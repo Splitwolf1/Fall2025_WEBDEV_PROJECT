@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, X, Send, Bot, User } from 'lucide-react';
+import { MessageSquare, X, Send, Bot, User, Loader2 } from 'lucide-react';
 
 interface Message {
   id: number;
@@ -13,6 +13,19 @@ interface Message {
   text: string;
   timestamp: Date;
   suggestions?: string[];
+  isLoading?: boolean;
+}
+
+interface ChatResponse {
+  success: boolean;
+  intent?: string;
+  response: {
+    text: string;
+    quickReplies?: string[];
+    data?: any;
+  };
+  timestamp: string;
+  message?: string;
 }
 
 const initialMessages: Message[] = [
@@ -35,48 +48,87 @@ export default function ChatWidget() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [inputMessage, setInputMessage] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [userId, setUserId] = useState<string>('');
 
-  const handleSendMessage = () => {
-    if (!inputMessage.trim()) return;
+  const CHATBOT_SERVICE_URL = process.env.NEXT_PUBLIC_CHATBOT_SERVICE_URL || 'http://localhost:3007';
+
+  // Get user ID from localStorage or session (simplified for now)
+  useEffect(() => {
+    // In a real app, this would come from authentication
+    const storedUserId = localStorage.getItem('userId') || '';
+    setUserId(storedUserId);
+  }, []);
+
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim() || isLoading) return;
+
+    const messageText = inputMessage;
+    setInputMessage('');
+    setIsLoading(true);
 
     // Add user message
     const userMessage: Message = {
-      id: messages.length + 1,
+      id: Date.now(),
       sender: 'user',
-      text: inputMessage,
+      text: messageText,
       timestamp: new Date(),
     };
 
-    setMessages([...messages, userMessage]);
-    setInputMessage('');
+    setMessages(prev => [...prev, userMessage]);
 
-    // Simulate bot response
-    setTimeout(() => {
-      const botResponse: Message = {
-        id: messages.length + 2,
+    // Add loading message
+    const loadingMessage: Message = {
+      id: Date.now() + 1,
+      sender: 'bot',
+      text: '',
+      timestamp: new Date(),
+      isLoading: true,
+    };
+
+    setMessages(prev => [...prev, loadingMessage]);
+
+    try {
+      const response = await fetch(`${CHATBOT_SERVICE_URL}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: messageText,
+          userId: userId || undefined,
+        }),
+      });
+
+      const data: ChatResponse = await response.json();
+
+      if (data.success && data.response) {
+        const botResponse: Message = {
+          id: Date.now() + 2,
+          sender: 'bot',
+          text: data.response.text,
+          timestamp: new Date(),
+          suggestions: data.response.quickReplies,
+        };
+
+        setMessages(prev => prev.filter(m => !m.isLoading).concat([botResponse]));
+      } else {
+        throw new Error(data.message || 'Failed to get response');
+      }
+    } catch (error: any) {
+      console.error('Chat error:', error);
+      
+      const errorMessage: Message = {
+        id: Date.now() + 3,
         sender: 'bot',
-        text: getBotResponse(inputMessage),
+        text: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment or contact our support team.",
         timestamp: new Date(),
+        suggestions: ['Contact support', 'Try again'],
       };
-      setMessages(prev => [...prev, botResponse]);
-    }, 1000);
-  };
 
-  const getBotResponse = (userInput: string): string => {
-    const input = userInput.toLowerCase();
-
-    if (input.includes('order') || input.includes('track')) {
-      return 'I can help you track your orders! Please provide your order ID, or visit the Orders page to see all your orders.';
-    } else if (input.includes('product') || input.includes('find')) {
-      return 'You can browse our fresh produce catalog on the Products page. We have vegetables, fruits, herbs, and more!';
-    } else if (input.includes('support') || input.includes('help')) {
-      return 'Our support team is available 24/7. You can reach us at support@farmtotable.com or call (555) 123-4567.';
-    } else if (input.includes('supplier')) {
-      return 'Check out the Suppliers page to view all our farm partners, their ratings, and available products.';
-    } else if (input.includes('delivery')) {
-      return 'Typical delivery takes 1-2 days. You can track your delivery status in real-time on the Tracking page.';
-    } else {
-      return 'Thanks for your message! For specific assistance, try asking about orders, products, suppliers, or deliveries. You can also contact our support team directly.';
+      setMessages(prev => prev.filter(m => !m.isLoading).concat([errorMessage]));
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -162,17 +214,26 @@ export default function ChatWidget() {
                         : 'bg-gray-100 text-gray-900'
                     }`}
                   >
-                    <p className="text-sm">{message.text}</p>
-                    <p
-                      className={`text-xs mt-1 ${
-                        message.sender === 'user' ? 'text-green-100' : 'text-gray-500'
-                      }`}
-                    >
-                      {message.timestamp.toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </p>
+                    {message.isLoading ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <p className="text-sm">Typing...</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                    )}
+                    {!message.isLoading && (
+                      <p
+                        className={`text-xs mt-1 ${
+                          message.sender === 'user' ? 'text-green-100' : 'text-gray-500'
+                        }`}
+                      >
+                        {message.timestamp.toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </p>
+                    )}
                   </div>
                   {message.sender === 'user' && (
                     <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
@@ -213,11 +274,15 @@ export default function ChatWidget() {
               />
               <Button
                 onClick={handleSendMessage}
-                disabled={!inputMessage.trim()}
+                disabled={!inputMessage.trim() || isLoading}
                 className="bg-green-600 hover:bg-green-700"
                 size="icon"
               >
-                <Send className="h-4 w-4" />
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </Button>
             </div>
             <p className="text-xs text-gray-500 mt-2 text-center">

@@ -95,6 +95,7 @@ services:
       - farm2table-network
     volumes:
       - ./api-gateway:/app
+      - ./shared:/app/shared
       - /app/node_modules
 
   # Microservices
@@ -118,6 +119,7 @@ services:
       - farm2table-network
     volumes:
       - ./services/user-service:/app
+      - ./shared:/app/shared
       - /app/node_modules
 
   product-service:
@@ -139,6 +141,7 @@ services:
       - farm2table-network
     volumes:
       - ./services/product-service:/app
+      - ./shared:/app/shared
       - /app/node_modules
 
   order-service:
@@ -160,6 +163,7 @@ services:
       - farm2table-network
     volumes:
       - ./services/order-service:/app
+      - ./shared:/app/shared
       - /app/node_modules
 
   delivery-service:
@@ -181,6 +185,7 @@ services:
       - farm2table-network
     volumes:
       - ./services/delivery-service:/app
+      - ./shared:/app/shared
       - /app/node_modules
 
   health-service:
@@ -202,6 +207,7 @@ services:
       - farm2table-network
     volumes:
       - ./services/health-service:/app
+      - ./shared:/app/shared
       - /app/node_modules
 
   notification-service:
@@ -222,6 +228,7 @@ services:
       - farm2table-network
     volumes:
       - ./services/notification-service:/app
+      - ./shared:/app/shared
       - /app/node_modules
 
   chatbot-service:
@@ -234,13 +241,22 @@ services:
       - PORT=3007
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
+      - ORDER_SERVICE_URL=http://order-service:3003
+      - DELIVERY_SERVICE_URL=http://delivery-service:3004
+      - PRODUCT_SERVICE_URL=http://product-service:3002
+      - USER_SERVICE_URL=http://user-service:3001
     depends_on:
       - rabbitmq
       - consul
+      - order-service
+      - delivery-service
+      - product-service
+      - user-service
     networks:
       - farm2table-network
     volumes:
       - ./services/chatbot-service:/app
+      - ./shared:/app/shared
       - /app/node_modules
 
 volumes:

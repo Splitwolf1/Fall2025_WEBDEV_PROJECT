@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Order, { OrderStatus } from '../models/Order';
 import axios from 'axios';
+import { getRabbitMQClient } from '../../../../shared/rabbitmq';
 
 const router = express.Router();
 
@@ -297,7 +298,24 @@ router.post('/', async (req: Request, res: Response) => {
       order: createdOrders[0], // Return first order for backward compatibility
     });
 
-    // TODO: Publish order.created event to RabbitMQ
+    // Publish order.created event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      for (const order of createdOrders) {
+        await rabbitmq.publish('farm2table.events', 'order.created', {
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          customerId: order.customerId,
+          farmerId: order.farmerId,
+          totalAmount: order.totalAmount,
+          items: order.items,
+          status: order.status,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('Failed to publish order.created events:', error);
+    }
   } catch (error: any) {
     console.error('[Order-Service] ❌ Create order error:', error);
     console.error('[Order-Service] Error stack:', error.stack);
@@ -445,7 +463,21 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
       order,
     });
 
-    // TODO: Publish order.status_updated event to RabbitMQ
+    // Publish order.status_updated event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'order.status_updated', {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        customerId: order.customerId,
+        farmerId: order.farmerId,
+        previousStatus: order.timeline[order.timeline.length - 2]?.status,
+        newStatus: order.status,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to publish order.status_updated event:', error);
+    }
   } catch (error: any) {
     console.error('[Order-Service] ❌ Update order status error:', error);
     res.status(500).json({
@@ -491,7 +523,21 @@ router.patch('/:id/cancel', async (req: Request, res: Response) => {
       order,
     });
 
-    // TODO: Publish order.cancelled event to RabbitMQ
+    // Publish order.cancelled event to RabbitMQ
+    try {
+      const rabbitmq = await getRabbitMQClient();
+      await rabbitmq.publish('farm2table.events', 'order.cancelled', {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        customerId: order.customerId,
+        farmerId: order.farmerId,
+        totalAmount: order.totalAmount,
+        cancellationReason: req.body.reason,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to publish order.cancelled event:', error);
+    }
   } catch (error: any) {
     console.error('Cancel order error:', error);
     res.status(500).json({

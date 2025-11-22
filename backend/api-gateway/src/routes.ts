@@ -44,7 +44,7 @@ router.use(
     onError: (err, req, res) => {
       console.error('[Proxy] Proxy error:', {
         message: err.message,
-        code: err.code,
+        code: (err as any).code,
         path: req.path,
       });
       if (!res.headersSent) {
@@ -88,7 +88,7 @@ router.use(
     onError: (err, req, res) => {
       console.error('[Proxy] Product proxy error:', {
         message: err.message,
-        code: err.code,
+        code: (err as any).code,
         path: req.path,
       });
       if (!res.headersSent) {
@@ -133,7 +133,7 @@ router.use(
     onError: (err, req, res) => {
       console.error('[Proxy] Order proxy error:', {
         message: err.message,
-        code: err.code,
+        code: (err as any).code,
         path: req.path,
       });
       if (!res.headersSent) {
@@ -178,7 +178,7 @@ router.use(
     onError: (err, req, res) => {
       console.error('[Proxy] Delivery proxy error:', {
         message: err.message,
-        code: err.code,
+        code: (err as any).code,
         path: req.path,
       });
       if (!res.headersSent) {
@@ -223,7 +223,7 @@ router.use(
     onError: (err, req, res) => {
       console.error('[Proxy] Fleet proxy error:', {
         message: err.message,
-        code: err.code,
+        code: (err as any).code,
         path: req.path,
       });
       if (!res.headersSent) {
