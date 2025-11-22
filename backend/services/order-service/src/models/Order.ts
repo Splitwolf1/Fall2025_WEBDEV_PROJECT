@@ -45,6 +45,12 @@ export interface IOrder extends Document {
     timestamp: Date;
     note?: string;
   }[];
+  ratings: {
+    farmerRated: boolean;
+    deliveryRated: boolean;
+    driverRated: boolean;
+    canRate: boolean;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -122,6 +128,24 @@ const OrderSchema = new Schema<IOrder>(
         note: String,
       },
     ],
+    ratings: {
+      farmerRated: {
+        type: Boolean,
+        default: false,
+      },
+      deliveryRated: {
+        type: Boolean,
+        default: false,
+      },
+      driverRated: {
+        type: Boolean,
+        default: false,
+      },
+      canRate: {
+        type: Boolean,
+        default: false,
+      },
+    },
   },
   {
     timestamps: true,

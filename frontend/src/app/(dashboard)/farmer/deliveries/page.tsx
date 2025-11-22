@@ -9,6 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import {
   Calendar,
   Clock,
   Truck,
@@ -18,7 +26,9 @@ import {
   CheckCircle,
   AlertCircle,
   TrendingUp,
-  Navigation
+  Navigation,
+  Star,
+  StarIcon
 } from 'lucide-react';
 import { auth } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
@@ -53,6 +63,7 @@ interface Delivery {
     };
   };
   status: string;
+  driverId?: string;
   currentLocation?: { lat: number; lng: number };
   estimatedArrivalTime?: string;
   createdAt: string;
@@ -68,6 +79,13 @@ export default function FarmerDeliveriesPage() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // Rating state
+  const [showRatingDialog, setShowRatingDialog] = useState(false);
+  const [ratingDelivery, setRatingDelivery] = useState<Delivery | null>(null);
+  const [rating, setRating] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
   useEffect(() => {
     const currentUser = auth.getCurrentUser();
@@ -234,6 +252,60 @@ export default function FarmerDeliveriesPage() {
         return <AlertCircle className="h-5 w-5 text-red-600" />;
       default:
         return <AlertCircle className="h-5 w-5 text-gray-600" />;
+    }
+  };
+
+  // Rating functions
+  const openRatingDialog = (delivery: Delivery) => {
+    setRatingDelivery(delivery);
+    setRating(0);
+    setRatingComment('');
+    setShowRatingDialog(true);
+  };
+
+  const closeRatingDialog = () => {
+    setShowRatingDialog(false);
+    setRatingDelivery(null);
+    setRating(0);
+    setRatingComment('');
+    setIsSubmittingRating(false);
+  };
+
+  const submitRating = async () => {
+    if (!ratingDelivery || rating === 0) return;
+
+    const currentUser = auth.getCurrentUser();
+    if (!currentUser) return;
+
+    try {
+      setIsSubmittingRating(true);
+
+      const ratingData = {
+        orderId: ratingDelivery.orderId,
+        raterId: currentUser.id,
+        ratedUserId: ratingDelivery.driverId || 'unknown',
+        type: 'driver' as const,
+        rating,
+        comment: ratingComment.trim(),
+        deliveryId: ratingDelivery._id,
+      };
+
+      const response = await apiClient.createRating(ratingData);
+      
+      if (response.success) {
+        // Close dialog
+        closeRatingDialog();
+        
+        // Refresh deliveries to update rating status
+        fetchDeliveries(currentUser.id);
+        
+        // Show success feedback (you could add a toast here)
+      }
+    } catch (error: any) {
+      console.error('Error submitting rating:', error);
+      alert(error.message || 'Failed to submit rating');
+    } finally {
+      setIsSubmittingRating(false);
     }
   };
 
@@ -448,10 +520,23 @@ export default function FarmerDeliveriesPage() {
                           <p className="text-xs text-gray-500">ETA</p>
                           <p className="text-lg font-bold text-gray-900">{eta}</p>
                         </div>
-                        <Button variant="outline" size="sm" className="w-full">
-                          <MapPin className="h-4 w-4 mr-2" />
-                          Track
-                        </Button>
+                        <div className="flex flex-col gap-2 w-full">
+                          <Button variant="outline" size="sm" className="w-full">
+                            <MapPin className="h-4 w-4 mr-2" />
+                            Track
+                          </Button>
+                          {delivery.status === 'delivered' && delivery.driverId && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="w-full"
+                              onClick={() => openRatingDialog(delivery)}
+                            >
+                              <Star className="h-4 w-4 mr-2" />
+                              Rate Driver
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </CardContent>
@@ -461,6 +546,73 @@ export default function FarmerDeliveriesPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Rating Dialog */}
+      <Dialog open={showRatingDialog} onOpenChange={setShowRatingDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rate Driver</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="text-center space-y-2">
+              <p className="text-sm text-gray-600">
+                How was your experience with {ratingDelivery?.driverName || 'the driver'}?
+              </p>
+              
+              <div className="flex justify-center space-x-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setRating(star)}
+                    className="p-1 hover:scale-110 transition-transform"
+                  >
+                    <StarIcon
+                      className={`h-8 w-8 ${
+                        star <= rating
+                          ? 'fill-yellow-400 text-yellow-400'
+                          : 'text-gray-300'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <label htmlFor="rating-comment" className="text-sm font-medium">
+                Additional Comments (Optional)
+              </label>
+              <Textarea
+                id="rating-comment"
+                placeholder="Share your experience with the driver..."
+                value={ratingComment}
+                onChange={(e) => setRatingComment(e.target.value)}
+                rows={3}
+                className="resize-none"
+                maxLength={500}
+              />
+              <p className="text-xs text-gray-500 text-right">
+                {ratingComment.length}/500 characters
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={closeRatingDialog}>
+              Cancel
+            </Button>
+            <Button
+              onClick={submitRating}
+              disabled={rating === 0 || isSubmittingRating}
+              className="min-w-[100px]"
+            >
+              {isSubmittingRating ? 'Submitting...' : 'Submit Rating'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import orderRoutes from './routes/orders';
+import ratingRoutes from './routes/ratings';
 import { getRabbitMQClient } from '../shared/rabbitmq';
 
 dotenv.config();
@@ -17,6 +18,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/orders', orderRoutes);
+app.use('/api/ratings', ratingRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -35,6 +37,7 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       orders: '/api/orders',
+      ratings: '/api/ratings',
     },
   });
 });

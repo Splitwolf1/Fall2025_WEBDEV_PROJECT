@@ -48,6 +48,17 @@ interface Product {
   description?: string;
   certifications?: string[];
   farmerId: string;
+  farmer?: {
+    _id: string;
+    profile: {
+      firstName: string;
+      lastName: string;
+    };
+    farmDetails?: {
+      farmName: string;
+      address: string;
+    };
+  };
   farmerName?: string;
   isAvailable: boolean;
 }
@@ -61,6 +72,22 @@ export default function BrowseProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Helper function to get farmer display name
+  const getFarmerDisplayName = (product: Product) => {
+    if (product.farmer) {
+      if (product.farmer.farmDetails?.farmName) {
+        return product.farmer.farmDetails.farmName;
+      }
+      if (product.farmer.profile) {
+        return `${product.farmer.profile.firstName} ${product.farmer.profile.lastName}`;
+      }
+    }
+    if (product.farmerName) {
+      return product.farmerName;
+    }
+    return `Farmer ${product.farmerId.slice(0, 8)}`;
+  };
 
   // Load products on mount
   useEffect(() => {
@@ -275,7 +302,7 @@ export default function BrowseProductsPage() {
                             <div className="flex-1">
                               <h4 className="font-medium">{product.name}</h4>
                               <p className="text-sm text-gray-500">
-                                {product.farmerName || `Farmer ${product.farmerId.slice(0, 8)}`}
+                                {getFarmerDisplayName(product)}
                               </p>
                               <p className="text-sm font-medium text-green-600">
                                 ${product.price.toFixed(2)}/{product.unit}
@@ -433,7 +460,7 @@ export default function BrowseProductsPage() {
                       <div>
                         <h3 className="font-semibold text-lg text-gray-900">{product.name}</h3>
                         <p className="text-sm text-gray-500">
-                          {product.farmerName || `Farmer ${product.farmerId.slice(0, 8)}`}
+                          {getFarmerDisplayName(product)}
                         </p>
                       </div>
 

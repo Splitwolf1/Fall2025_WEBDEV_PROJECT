@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Order, { OrderStatus } from '../models/Order';
 import axios from 'axios';
 import { getRabbitMQClient } from '../../shared/rabbitmq';
+import { updateOrderRatingEligibility } from './ratings';
 
 const router = express.Router();
 
@@ -446,6 +447,9 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     }
 
     await order.save();
+
+    // Update rating eligibility
+    await updateOrderRatingEligibility(order._id.toString(), status);
 
     console.log(`[Order-Service] ✅ Order ${order.orderNumber} status updated: ${oldStatus} -> ${status}`);
 

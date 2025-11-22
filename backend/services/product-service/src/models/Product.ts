@@ -16,8 +16,21 @@ export enum QualityGrade {
   C = 'C',
 }
 
+export interface IFarmerInfo {
+  _id: mongoose.Types.ObjectId;
+  profile: {
+    firstName: string;
+    lastName: string;
+  };
+  farmDetails?: {
+    farmName: string;
+    address: string;
+  };
+}
+
 export interface IProduct extends Document {
   farmerId: mongoose.Types.ObjectId;
+  farmer?: IFarmerInfo;
   name: string;
   category: ProductCategory;
   description: string;

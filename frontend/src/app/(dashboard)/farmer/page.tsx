@@ -141,17 +141,30 @@ export default function FarmerDashboard() {
           trend: 'up' as const,
         }));
 
-      // Calculate average rating from products
-      let totalRating = 0;
-      let totalRatingCount = 0;
-      products.forEach((product: Product) => {
-        if (product.rating && product.rating.average && product.rating.count) {
-          totalRating += product.rating.average * product.rating.count;
-          totalRatingCount += product.rating.count;
+      // Fetch farmer ratings
+      let avgRating = '0';
+      let reviewsText = '0 reviews';
+      try {
+        const ratingsResponse: any = await apiClient.getUserRatings(currentUser.id, 'farmer');
+        if (ratingsResponse.success && ratingsResponse.stats) {
+          avgRating = ratingsResponse.stats.averageRating.toString();
+          const count = ratingsResponse.stats.totalRatings;
+          reviewsText = count > 0 ? `${count} review${count !== 1 ? 's' : ''}` : '0 reviews';
         }
-      });
-      const avgRating = totalRatingCount > 0 ? (totalRating / totalRatingCount).toFixed(1) : '0';
-      const reviewsText = totalRatingCount > 0 ? `${totalRatingCount} review${totalRatingCount !== 1 ? 's' : ''}` : '0 reviews';
+      } catch (error) {
+        console.log('Could not fetch farmer ratings:', error);
+        // Fallback to product ratings if farmer ratings not available
+        let totalRating = 0;
+        let totalRatingCount = 0;
+        products.forEach((product: Product) => {
+          if (product.rating && product.rating.average && product.rating.count) {
+            totalRating += product.rating.average * product.rating.count;
+            totalRatingCount += product.rating.count;
+          }
+        });
+        avgRating = totalRatingCount > 0 ? (totalRating / totalRatingCount).toFixed(1) : '0';
+        reviewsText = totalRatingCount > 0 ? `${totalRatingCount} review${totalRatingCount !== 1 ? 's' : ''}` : '0 reviews';
+      }
 
       setStats({
         revenue: {

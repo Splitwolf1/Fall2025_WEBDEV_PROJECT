@@ -58,6 +58,18 @@ interface Product {
   description?: string;
   certifications?: string[];
   images?: string[];
+  farmerId?: string;
+  farmer?: {
+    _id: string;
+    profile: {
+      firstName: string;
+      lastName: string;
+    };
+    farmDetails?: {
+      farmName: string;
+      address: string;
+    };
+  };
 }
 
 export default function InventoryPage() {
@@ -83,6 +95,28 @@ export default function InventoryPage() {
     description: '',
     certifications: [] as string[],
   });
+
+  // Edit state
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    category: '',
+    stockQuantity: '',
+    unit: '',
+    price: '',
+    qualityGrade: '',
+    harvestDate: '',
+    description: '',
+    certifications: [] as string[],
+  });
+
+  // Stock update state
+  const [stockUpdateProduct, setStockUpdateProduct] = useState<Product | null>(null);
+  const [isStockDialogOpen, setIsStockDialogOpen] = useState(false);
+  const [isUpdatingStock, setIsUpdatingStock] = useState(false);
+  const [newStockQuantity, setNewStockQuantity] = useState('');
 
   // Load user and products on mount
   useEffect(() => {
@@ -186,6 +220,105 @@ export default function InventoryPage() {
     } catch (err: any) {
       console.error('Error deleting product:', err);
       setError(err.message || 'Failed to delete product');
+    }
+  };
+
+  const handleEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setEditForm({
+      name: product.name,
+      category: product.category,
+      stockQuantity: product.stockQuantity.toString(),
+      unit: product.unit,
+      price: product.price.toString(),
+      qualityGrade: product.qualityGrade,
+      harvestDate: product.harvestDate ? new Date(product.harvestDate).toISOString().split('T')[0] : '',
+      description: product.description || '',
+      certifications: product.certifications || [],
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateProduct = async () => {
+    if (!editingProduct || !user) return;
+
+    // Validation
+    if (!editForm.name.trim()) {
+      setError('Product name is required');
+      return;
+    }
+    if (!editForm.stockQuantity || parseInt(editForm.stockQuantity) < 0) {
+      setError('Valid stock quantity is required');
+      return;
+    }
+    if (!editForm.price || parseFloat(editForm.price) < 0) {
+      setError('Valid price is required');
+      return;
+    }
+
+    try {
+      setIsEditing(true);
+      setError('');
+      const response: any = await apiClient.updateProduct(editingProduct._id, {
+        name: editForm.name.trim(),
+        category: editForm.category,
+        stockQuantity: parseInt(editForm.stockQuantity) || 0,
+        unit: editForm.unit,
+        price: parseFloat(editForm.price) || 0,
+        qualityGrade: editForm.qualityGrade,
+        harvestDate: editForm.harvestDate ? new Date(editForm.harvestDate).toISOString() : undefined,
+        description: editForm.description || '',
+        certifications: editForm.certifications || [],
+      });
+
+      if (response.success) {
+        setIsEditDialogOpen(false);
+        setEditingProduct(null);
+        await fetchProducts(user.id);
+      } else {
+        setError(response.message || 'Failed to update product');
+      }
+    } catch (err: any) {
+      console.error('Error updating product:', err);
+      setError(err.message || 'Failed to update product. Please check your connection and try again.');
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const handleStockUpdate = (product: Product) => {
+    setStockUpdateProduct(product);
+    setNewStockQuantity(product.stockQuantity.toString());
+    setIsStockDialogOpen(true);
+  };
+
+  const handleUpdateStock = async () => {
+    if (!stockUpdateProduct || !user) return;
+
+    const quantity = parseInt(newStockQuantity);
+    if (isNaN(quantity) || quantity < 0) {
+      setError('Please enter a valid stock quantity (0 or greater)');
+      return;
+    }
+
+    try {
+      setIsUpdatingStock(true);
+      setError('');
+      const response: any = await apiClient.updateProductStock(stockUpdateProduct._id, quantity);
+
+      if (response.success) {
+        setIsStockDialogOpen(false);
+        setStockUpdateProduct(null);
+        setNewStockQuantity('');
+        await fetchProducts(user.id);
+      } else {
+        setError(response.message || 'Failed to update stock');
+      }
+    } catch (err: any) {
+      console.error('Error updating stock:', err);
+      setError(err.message || 'Failed to update stock. Please check your connection and try again.');
+    } finally {
+      setIsUpdatingStock(false);
     }
   };
 
@@ -488,6 +621,181 @@ export default function InventoryPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Edit Product Dialog */}
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Edit Product</DialogTitle>
+                <DialogDescription>
+                  Update the product information. Modify any fields you want to change.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-name">Product Name *</Label>
+                  <Input
+                    id="edit-name"
+                    placeholder="e.g., Organic Tomatoes"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-category">Category *</Label>
+                  <Select
+                    value={editForm.category}
+                    onValueChange={(value) => setEditForm({ ...editForm, category: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vegetables">Vegetables</SelectItem>
+                      <SelectItem value="fruits">Fruits</SelectItem>
+                      <SelectItem value="herbs">Herbs</SelectItem>
+                      <SelectItem value="dairy">Dairy</SelectItem>
+                      <SelectItem value="grains">Grains</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-stock">Stock Quantity *</Label>
+                  <Input
+                    id="edit-stock"
+                    type="number"
+                    placeholder="e.g., 100"
+                    value={editForm.stockQuantity}
+                    onChange={(e) => setEditForm({ ...editForm, stockQuantity: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-unit">Unit *</Label>
+                  <Select
+                    value={editForm.unit}
+                    onValueChange={(value) => setEditForm({ ...editForm, unit: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="lb">Pounds (lb)</SelectItem>
+                      <SelectItem value="kg">Kilograms (kg)</SelectItem>
+                      <SelectItem value="unit">Units</SelectItem>
+                      <SelectItem value="dozen">Dozen</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-price">Price per Unit *</Label>
+                  <Input
+                    id="edit-price"
+                    type="number"
+                    step="0.01"
+                    placeholder="e.g., 4.50"
+                    value={editForm.price}
+                    onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-quality">Quality Grade *</Label>
+                  <Select
+                    value={editForm.qualityGrade}
+                    onValueChange={(value) => setEditForm({ ...editForm, qualityGrade: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select grade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="A">Grade A - Premium</SelectItem>
+                      <SelectItem value="B">Grade B - Standard</SelectItem>
+                      <SelectItem value="C">Grade C - Budget</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-harvest">Harvest Date</Label>
+                  <Input
+                    id="edit-harvest"
+                    type="date"
+                    value={editForm.harvestDate}
+                    onChange={(e) => setEditForm({ ...editForm, harvestDate: e.target.value })}
+                  />
+                </div>
+                <div className="col-span-2 space-y-2">
+                  <Label htmlFor="edit-description">Description</Label>
+                  <Textarea
+                    id="edit-description"
+                    placeholder="Optional product description..."
+                    rows={3}
+                    value={editForm.description}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleUpdateProduct} disabled={isEditing}>
+                  {isEditing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Update Product
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Stock Update Dialog */}
+          <Dialog open={isStockDialogOpen} onOpenChange={setIsStockDialogOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Update Stock Quantity</DialogTitle>
+                <DialogDescription>
+                  Update the stock quantity for {stockUpdateProduct?.name}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="stock-quantity">New Stock Quantity</Label>
+                  <Input
+                    id="stock-quantity"
+                    type="number"
+                    min="0"
+                    placeholder="Enter new quantity"
+                    value={newStockQuantity}
+                    onChange={(e) => setNewStockQuantity(e.target.value)}
+                  />
+                  <p className="text-sm text-gray-500">
+                    Current: {stockUpdateProduct?.stockQuantity} {stockUpdateProduct?.unit}
+                  </p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsStockDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleUpdateStock} disabled={isUpdatingStock}>
+                  {isUpdatingStock ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Update Stock'
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Stats Cards */}
@@ -608,7 +916,7 @@ export default function InventoryPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEditProduct(product)}>
                             <Edit className="h-4 w-4 mr-2" />
                             Edit
                           </DropdownMenuItem>
@@ -676,11 +984,20 @@ export default function InventoryPage() {
                     )}
 
                     <div className="flex gap-2 mt-4">
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => handleEditProduct(product)}
+                      >
                         <Edit className="h-3 w-3 mr-1" />
                         Edit
                       </Button>
-                      <Button size="sm" className="flex-1">
+                      <Button 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => handleStockUpdate(product)}
+                      >
                         Update Stock
                       </Button>
                     </div>

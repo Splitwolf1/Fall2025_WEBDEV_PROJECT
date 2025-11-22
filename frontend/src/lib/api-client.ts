@@ -403,6 +403,38 @@ class ApiClient {
     });
   }
 
+  // Rating endpoints
+  async createRating(ratingData: {
+    orderId: string;
+    raterId: string;
+    ratedUserId: string;
+    type: 'farmer' | 'delivery' | 'product' | 'driver';
+    rating: number;
+    comment?: string;
+    deliveryId?: string;
+    productId?: string;
+    driverId?: string;
+    isAnonymous?: boolean;
+  }) {
+    return this.request('/api/ratings', {
+      method: 'POST',
+      body: JSON.stringify(ratingData),
+    });
+  }
+
+  async getUserRatings(userId: string, type?: string, page?: number, limit?: number) {
+    const params = new URLSearchParams();
+    if (type) params.append('type', type);
+    if (page) params.append('page', page.toString());
+    if (limit) params.append('limit', limit.toString());
+    
+    return this.request(`/api/ratings/user/${userId}?${params.toString()}`);
+  }
+
+  async getOrderRatings(orderId: string) {
+    return this.request(`/api/ratings/order/${orderId}`);
+  }
+
   // Fleet Management endpoints
   async getVehicles(distributorId?: string, status?: string) {
     const params = new URLSearchParams();

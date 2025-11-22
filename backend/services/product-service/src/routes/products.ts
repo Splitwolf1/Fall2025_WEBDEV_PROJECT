@@ -3,6 +3,53 @@ import mongoose from 'mongoose';
 import Product, { ProductCategory } from '../models/Product';
 import { getRabbitMQClient } from '../../shared/rabbitmq';
 
+// Helper function to fetch user data from user-service
+const fetchUserData = async (userId: string) => {
+  try {
+    const response = await fetch(`http://user-service:3001/api/auth/users/${userId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (response.ok) {
+      const userData = await response.json();
+      return userData.user;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error fetching user data:', error);
+    return null;
+  }
+};
+
+// Helper function to populate farmer info for products
+const populateProductsWithFarmerInfo = async (products: any[]) => {
+  const farmerIds = [...new Set(products.map(p => p.farmerId?.toString()))];
+  const farmerDataPromises = farmerIds.map(id => fetchUserData(id));
+  const farmersData = await Promise.all(farmerDataPromises);
+  
+  const farmersMap = new Map();
+  farmersData.forEach((farmer, index) => {
+    if (farmer) {
+      farmersMap.set(farmerIds[index], farmer);
+    }
+  });
+  
+  return products.map(product => {
+    const farmer = farmersMap.get(product.farmerId?.toString());
+    return {
+      ...product.toObject(),
+      farmer: farmer ? {
+        _id: farmer._id,
+        profile: farmer.profile,
+        farmDetails: farmer.farmDetails,
+      } : null,
+    };
+  });
+};
+
 const router = express.Router();
 
 // Get all products with filters
@@ -57,9 +104,12 @@ router.get('/', async (req: Request, res: Response) => {
 
     const total = await Product.countDocuments(query);
 
+    // Populate farmer information
+    const productsWithFarmerInfo = await populateProductsWithFarmerInfo(products);
+
     res.json({
       success: true,
-      products,
+      products: productsWithFarmerInfo,
       pagination: {
         page: pageNum,
         limit: limitNum,
@@ -89,9 +139,12 @@ router.get('/:id', async (req: Request, res: Response) => {
       });
     }
 
+    // Populate farmer information
+    const [productWithFarmerInfo] = await populateProductsWithFarmerInfo([product]);
+
     res.json({
       success: true,
-      product,
+      product: productWithFarmerInfo,
     });
   } catch (error: any) {
     console.error('Get product error:', error);

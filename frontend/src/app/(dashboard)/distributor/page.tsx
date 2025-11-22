@@ -59,6 +59,7 @@ export default function DistributorDashboard() {
     completedToday: { value: '0', onTime: '0 on-time' },
     totalRevenue: { value: '$0', change: '0%' },
     avgDeliveryTime: { value: '0 min', status: 'N/A' },
+    rating: { value: '0', reviews: '0 reviews' },
   });
   const [activeRoutes, setActiveRoutes] = useState<any[]>([]);
   const [upcomingPickups, setUpcomingPickups] = useState<any[]>([]);
@@ -284,6 +285,20 @@ export default function DistributorDashboard() {
         }
       }
 
+      // Fetch distributor ratings
+      let avgRating = '0';
+      let reviewsText = '0 reviews';
+      try {
+        const ratingsResponse: any = await apiClient.getUserRatings(currentUser.id, 'delivery');
+        if (ratingsResponse.success && ratingsResponse.stats) {
+          avgRating = ratingsResponse.stats.averageRating.toString();
+          const count = ratingsResponse.stats.totalRatings;
+          reviewsText = count > 0 ? `${count} review${count !== 1 ? 's' : ''}` : '0 reviews';
+        }
+      } catch (error) {
+        console.log('Could not fetch distributor ratings:', error);
+      }
+
       setStats({
         activeDeliveries: {
           value: activeDeliveriesList.length.toString(),
@@ -300,6 +315,10 @@ export default function DistributorDashboard() {
         avgDeliveryTime: {
           value: avgDeliveryTime,
           status: deliveryTimeCount > 0 ? `${deliveryTimeCount} deliveries` : 'N/A',
+        },
+        rating: {
+          value: avgRating,
+          reviews: reviewsText,
         },
       });
 
@@ -385,7 +404,7 @@ export default function DistributorDashboard() {
     <div className="p-8">
         <div className="space-y-8">
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                 <CardTitle className="text-sm font-medium text-gray-600">
@@ -447,6 +466,21 @@ export default function DistributorDashboard() {
                 <p className="text-xs text-green-600 mt-1 font-medium">
                   {stats.avgDeliveryTime.status}
                 </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Customer Rating
+                </CardTitle>
+                <div className="h-8 w-8 rounded-full bg-yellow-100 flex items-center justify-center">
+                  ⭐
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.rating.value} ⭐</div>
+                <p className="text-xs text-gray-500 mt-1">From {stats.rating.reviews}</p>
               </CardContent>
             </Card>
           </div>

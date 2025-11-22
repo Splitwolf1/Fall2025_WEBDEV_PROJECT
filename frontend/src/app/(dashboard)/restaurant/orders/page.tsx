@@ -20,6 +20,8 @@ import {
   Download,
   MessageSquare,
   Loader2,
+  Star,
+  StarIcon,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { auth } from '@/lib/auth';
@@ -30,6 +32,9 @@ interface Order {
   _id: string;
   orderNumber: string;
   customerId: string;
+  customerName: string;
+  farmerId: string;
+  farmerName: string;
   customerType: string;
   items: Array<{
     productId: string;
@@ -46,6 +51,12 @@ interface Order {
   status: string;
   deliveryAddress: any;
   notes?: string;
+  distributorId?: string;
+  ratings?: {
+    farmerRated: boolean;
+    deliveryRated: boolean;
+    canRate: boolean;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -62,6 +73,14 @@ export default function RestaurantOrdersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [avgDeliveryTime, setAvgDeliveryTime] = useState<string>('0 days');
+  
+  // Rating state
+  const [showRatingDialog, setShowRatingDialog] = useState(false);
+  const [ratingOrder, setRatingOrder] = useState<Order | null>(null);
+  const [ratingType, setRatingType] = useState<'farmer' | 'delivery'>('farmer');
+  const [rating, setRating] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
   // Load orders on mount and listen for real-time updates
   useEffect(() => {
@@ -160,6 +179,65 @@ export default function RestaurantOrdersPage() {
       }
     } catch (err) {
       setAvgDeliveryTime('0 days');
+    }
+  };
+
+  const handleRateOrder = (order: Order, type: 'farmer' | 'delivery') => {
+    setRatingOrder(order);
+    setRatingType(type);
+    setRating(0);
+    setRatingComment('');
+    setShowRatingDialog(true);
+  };
+
+  const submitRating = async () => {
+    if (!ratingOrder || !rating || rating < 1 || rating > 5) {
+      setError('Please select a rating between 1 and 5 stars');
+      return;
+    }
+
+    const currentUser = auth.getCurrentUser();
+    if (!currentUser) {
+      setError('You must be logged in to submit a rating');
+      return;
+    }
+
+    try {
+      setIsSubmittingRating(true);
+      setError('');
+
+      const ratingData = {
+        orderId: ratingOrder._id,
+        raterId: currentUser.id,
+        ratedUserId: ratingType === 'farmer' ? ratingOrder.farmerId : ratingOrder.distributorId || '',
+        type: ratingType,
+        rating,
+        comment: ratingComment.trim(),
+        isAnonymous: false,
+      };
+
+      if (ratingType === 'delivery' && !ratingOrder.distributorId) {
+        setError('No delivery service associated with this order');
+        return;
+      }
+
+      const response: any = await apiClient.createRating(ratingData);
+
+      if (response.success) {
+        setShowRatingDialog(false);
+        setRatingOrder(null);
+        // Refresh orders to update rating status
+        await fetchOrders();
+        // Show success message
+        alert(`Thank you for rating the ${ratingType}!`);
+      } else {
+        setError(response.message || 'Failed to submit rating');
+      }
+    } catch (err: any) {
+      console.error('Rating submission error:', err);
+      setError(err.message || 'Failed to submit rating. Please try again.');
+    } finally {
+      setIsSubmittingRating(false);
     }
   };
 
@@ -354,10 +432,41 @@ export default function RestaurantOrdersPage() {
                         View Details
                       </Button>
                       {order.status === 'delivered' && (
-                        <Button size="sm" variant="outline">
-                          <Download className="h-4 w-4 mr-2" />
-                          Invoice
-                        </Button>
+                        <>
+                          <Button size="sm" variant="outline">
+                            <Download className="h-4 w-4 mr-2" />
+                            Invoice
+                          </Button>
+                          
+                          {/* Rating Buttons */}
+                          {order.ratings?.canRate && (
+                            <div className="flex gap-2">
+                              {!order.ratings?.farmerRated && (
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="text-green-600 border-green-600 hover:bg-green-50"
+                                  onClick={() => handleRateOrder(order, 'farmer')}
+                                >
+                                  <Star className="h-4 w-4 mr-1" />
+                                  Rate Farmer
+                                </Button>
+                              )}
+                              
+                              {order.distributorId && !order.ratings?.deliveryRated && (
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                                  onClick={() => handleRateOrder(order, 'delivery')}
+                                >
+                                  <Star className="h-4 w-4 mr-1" />
+                                  Rate Delivery
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -448,6 +557,96 @@ export default function RestaurantOrdersPage() {
                 Download Invoice
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rating Dialog */}
+      <Dialog open={showRatingDialog} onOpenChange={setShowRatingDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Rate {ratingType === 'farmer' ? 'Farmer' : 'Delivery Service'}
+            </DialogTitle>
+            <DialogDescription>
+              Share your experience with {ratingType === 'farmer' ? ratingOrder?.farmerName : 'the delivery service'} for order #{ratingOrder?.orderNumber}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Star Rating */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Rating</label>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setRating(star)}
+                    className="p-1 hover:scale-110 transition-transform"
+                  >
+                    <Star
+                      className={`h-6 w-6 ${
+                        star <= rating
+                          ? 'fill-yellow-400 text-yellow-400'
+                          : 'text-gray-300'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500">
+                {rating === 0 && 'Select a rating'}
+                {rating === 1 && 'Poor'}
+                {rating === 2 && 'Fair'}
+                {rating === 3 && 'Good'}
+                {rating === 4 && 'Very Good'}
+                {rating === 5 && 'Excellent'}
+              </p>
+            </div>
+
+            {/* Comment */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Comment (Optional)</label>
+              <textarea
+                className="w-full px-3 py-2 border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                rows={3}
+                placeholder={`Share your experience with the ${ratingType}...`}
+                value={ratingComment}
+                onChange={(e) => setRatingComment(e.target.value)}
+                maxLength={500}
+              />
+              <p className="text-xs text-gray-500">{ratingComment.length}/500 characters</p>
+            </div>
+
+            {error && (
+              <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                {error}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowRatingDialog(false)}
+              disabled={isSubmittingRating}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submitRating}
+              disabled={rating === 0 || isSubmittingRating}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isSubmittingRating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit Rating'
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
