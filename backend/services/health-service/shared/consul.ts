@@ -6,6 +6,13 @@ export interface ServiceRegistration {
   host?: string;
 }
 
+interface HealthService {
+  Service: {
+    Address: string;
+    Port: number;
+  };
+}
+
 export const registerService = async (
   serviceName: string,
   port: number,
@@ -13,7 +20,7 @@ export const registerService = async (
   consulPort: number = 8500
 ): Promise<void> => {
   try {
-    const consul = new Consul({ host: consulHost, port: consulPort });
+    const consul = new Consul({ host: consulHost, port: consulPort.toString() });
 
     const registration = {
       name: serviceName,

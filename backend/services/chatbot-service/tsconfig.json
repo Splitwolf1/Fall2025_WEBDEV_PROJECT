@@ -10,11 +10,12 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "moduleResolution": "node",
+    "typeRoots": ["./node_modules/@types"],
     "baseUrl": ".",
     "paths": {
       "shared/*": ["../../shared/*"]
     }
   },
-  "include": ["src/**/*", "../../shared/**/*"],
+  "include": ["src/**/*", "shared/**/*", "../../shared/**/*"],
   "exclude": ["node_modules", "dist"]
 }

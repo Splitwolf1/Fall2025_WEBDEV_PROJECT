@@ -172,13 +172,13 @@ router.post('/', async (req: Request, res: Response) => {
       const rabbitmq = await getRabbitMQClient();
       await rabbitmq.publish('farm2table.events', 'delivery.created', {
         deliveryId: delivery._id,
-        deliveryNumber: delivery.deliveryNumber,
+        deliveryNumber: delivery.orderNumber,
         orderId: delivery.orderId,
         distributorId: delivery.distributorId,
         status: delivery.status,
-        pickupLocation: delivery.pickupLocation,
-        deliveryLocation: delivery.deliveryLocation,
-        estimatedPickupTime: delivery.estimatedPickupTime,
+        pickupLocation: delivery.route.pickup.location,
+        deliveryLocation: delivery.route.delivery.location,
+        estimatedPickupTime: delivery.route.pickup.scheduledTime,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
@@ -467,10 +467,10 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
       const rabbitmq = await getRabbitMQClient();
       await rabbitmq.publish('farm2table.events', 'delivery.status_updated', {
         deliveryId: delivery._id,
-        deliveryNumber: delivery.deliveryNumber,
+        deliveryNumber: delivery.orderNumber,
         orderId: delivery.orderId,
         distributorId: delivery.distributorId,
-        previousStatus: delivery.statusHistory[delivery.statusHistory.length - 2]?.status,
+        previousStatus: delivery.timeline.length > 1 ? delivery.timeline[delivery.timeline.length - 2]?.status : undefined,
         newStatus: delivery.status,
         location: req.body.location,
         timestamp: new Date().toISOString()
@@ -573,10 +573,10 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
       const rabbitmq = await getRabbitMQClient();
       await rabbitmq.publish('farm2table.events', 'delivery.completed', {
         deliveryId: delivery._id,
-        deliveryNumber: delivery.deliveryNumber,
+        deliveryNumber: delivery.orderNumber,
         orderId: delivery.orderId,
         distributorId: delivery.distributorId,
-        completedAt: delivery.completedAt,
+        completedAt: delivery.route.delivery.actualTime || new Date(),
         proofOfDelivery: delivery.proofOfDelivery,
         actualDeliveryTime: req.body.actualDeliveryTime,
         timestamp: new Date().toISOString()
