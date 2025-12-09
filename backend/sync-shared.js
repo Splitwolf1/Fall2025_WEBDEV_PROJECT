@@ -12,6 +12,7 @@ const targets = [
   'gateways/external-api-gateway',
   'gateways/internal-api-gateway',
   'api-gateway',
+  'services/auth-service',
   'services/user-service',
   'services/product-service',
   'services/order-service',

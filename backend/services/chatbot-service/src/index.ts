@@ -8,7 +8,7 @@ import { getRabbitMQClient, RabbitMQClient } from '../shared/rabbitmq';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3007;
+const PORT = process.env.PORT || 3008;
 
 // Middleware
 app.use(cors());
@@ -84,9 +84,9 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Chat error:', error);
-    
+
     // Return user-friendly error messages
-    const errorMessage = error.message && error.message.includes('Failed to fetch') 
+    const errorMessage = error.message && error.message.includes('Failed to fetch')
       ? "I'm having trouble connecting to our services right now. Please try again in a moment."
       : "I'm sorry, I'm having trouble processing your request right now. Please try again.";
 

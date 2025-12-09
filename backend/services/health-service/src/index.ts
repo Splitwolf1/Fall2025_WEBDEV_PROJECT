@@ -1,14 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import mongoose from 'mongoose';
+import { connectDB } from '../shared/database';
 import inspectionRoutes from './routes/inspections';
 import { getRabbitMQClient } from '../shared/rabbitmq';
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3005;
+const PORT = process.env.PORT || 3006;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/health';
 
 // Middleware
 app.use(cors());
@@ -30,8 +31,9 @@ app.get('/health', (req, res) => {
 // Root route
 app.get('/', (req, res) => {
   res.json({
-    service: 'health-service',
+    service: 'Health Service',
     version: '1.0.0',
+    description: 'Health inspection and compliance management',
     endpoints: {
       health: '/health',
       inspections: '/api/inspections',
@@ -40,46 +42,26 @@ app.get('/', (req, res) => {
 });
 
 // Connect to MongoDB
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/health');
-    console.log('✅ MongoDB connected');
-  } catch (error) {
-    console.error('❌ MongoDB connection error:', error);
-    process.exit(1);
-  }
-};
+connectDB(MONGO_URI).then(() => {
+  console.log('✅ Health Service - MongoDB connected');
 
-// Start server
-const startServer = async () => {
-  try {
-    await connectDB();
+  app.listen(PORT, () => {
+    console.log(`🏥 Health Service running on port ${PORT}`);
+  });
+});
 
-    app.listen(PORT, () => {
-      console.log(`🚀 Health Service running on port ${PORT}`);
-      console.log(`📍 Health check: http://localhost:${PORT}/health`);
-    });
-
-    // Connect to RabbitMQ
-    try {
-      await getRabbitMQClient();
-      console.log('✅ RabbitMQ connected');
-    } catch (error) {
-      console.error('❌ RabbitMQ connection error:', error);
-    }
-
-    // TODO: Register with Consul
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
-  }
-};
-
-startServer();
+// Connect to RabbitMQ
+getRabbitMQClient()
+  .then(() => {
+    console.log('✅ Health Service - RabbitMQ connected');
+  })
+  .catch((error) => {
+    console.error('❌ Health Service - RabbitMQ connection failed:', error);
+  });
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
+process.on('SIGINT', () => {
   console.log('\n⚠️ Shutting down gracefully...');
-  await mongoose.disconnect();
   process.exit(0);
 });
+

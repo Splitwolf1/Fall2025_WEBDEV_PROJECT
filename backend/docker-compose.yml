@@ -136,19 +136,47 @@ services:
   # MICROSERVICES
   # ============================================
 
-  # Microservices
-  user-service:
-    build: ./services/user-service
-    container_name: farm2table-user-service
+  # ============================================
+  # USER & AUTHENTICATION SERVICES
+  # ============================================
+
+  # Auth Service (Port 3001) - Authentication only
+  auth-service:
+    build: ./services/auth-service
+    container_name: farm2table-auth-service
     ports:
       - "3001:3001"
     environment:
-      - SERVICE_NAME=user-service
+      - SERVICE_NAME=auth-service
       - PORT=3001
       - MONGO_URI=mongodb://mongo-users:27017/users
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
       - JWT_SECRET=your-secret-key-change-in-production
+      - JWT_EXPIRES_IN=7d
+    depends_on:
+      - mongo-users
+      - rabbitmq
+      - consul
+    networks:
+      - farm2table-network
+    volumes:
+      - ./services/auth-service:/app
+      - ./shared:/app/shared
+      - /app/node_modules
+
+  # User Service (Port 3002) - Profile management only
+  user-service:
+    build: ./services/user-service
+    container_name: farm2table-user-service
+    ports:
+      - "3002:3002"
+    environment:
+      - SERVICE_NAME=user-service
+      - PORT=3002
+      - MONGO_URI=mongodb://mongo-users:27017/users
+      - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
+      - CONSUL_HOST=consul
     depends_on:
       - mongo-users
       - rabbitmq
@@ -164,10 +192,10 @@ services:
     build: ./services/product-service
     container_name: farm2table-product-service
     ports:
-      - "3002:3002"
+      - "3003:3003"
     environment:
       - SERVICE_NAME=product-service
-      - PORT=3002
+      - PORT=3003
       - MONGO_URI=mongodb://mongo-products:27017/products
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
@@ -186,10 +214,10 @@ services:
     build: ./services/order-service
     container_name: farm2table-order-service
     ports:
-      - "3003:3003"
+      - "3004:3004"
     environment:
       - SERVICE_NAME=order-service
-      - PORT=3003
+      - PORT=3004
       - MONGO_URI=mongodb://mongo-orders:27017/orders
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
@@ -208,10 +236,10 @@ services:
     build: ./services/delivery-service
     container_name: farm2table-delivery-service
     ports:
-      - "3004:3004"
+      - "3005:3005"
     environment:
       - SERVICE_NAME=delivery-service
-      - PORT=3004
+      - PORT=3005
       - MONGO_URI=mongodb://mongo-deliveries:27017/deliveries
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
@@ -230,10 +258,10 @@ services:
     build: ./services/health-service
     container_name: farm2table-health-service
     ports:
-      - "3005:3005"
+      - "3006:3006"
     environment:
       - SERVICE_NAME=health-service
-      - PORT=3005
+      - PORT=3006
       - MONGO_URI=mongodb://mongo-health:27017/health
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
@@ -252,13 +280,13 @@ services:
     build: ./services/notification-service
     container_name: farm2table-notification-service
     ports:
-      - "3006:3006"
+      - "3007:3007"
     environment:
       - SERVICE_NAME=notification-service
-      - PORT=3006
+      - PORT=3007
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
-      - SOCKETIO_PORT=3006
+      - SOCKETIO_PORT=3007
     depends_on:
       - rabbitmq
       - consul
@@ -273,23 +301,25 @@ services:
     build: ./services/chatbot-service
     container_name: farm2table-chatbot-service
     ports:
-      - "3007:3007"
+      - "3008:3008"
     environment:
       - SERVICE_NAME=chatbot-service
-      - PORT=3007
+      - PORT=3008
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
-      - ORDER_SERVICE_URL=http://order-service:3003
-      - DELIVERY_SERVICE_URL=http://delivery-service:3004
-      - PRODUCT_SERVICE_URL=http://product-service:3002
-      - USER_SERVICE_URL=http://user-service:3001
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - USER_SERVICE_URL=http://user-service:3002
+      - PRODUCT_SERVICE_URL=http://product-service:3003
+      - ORDER_SERVICE_URL=http://order-service:3004
+      - DELIVERY_SERVICE_URL=http://delivery-service:3005
     depends_on:
       - rabbitmq
       - consul
+      - auth-service
+      - user-service
+      - product-service
       - order-service
       - delivery-service
-      - product-service
-      - user-service
     networks:
       - farm2table-network
     volumes:

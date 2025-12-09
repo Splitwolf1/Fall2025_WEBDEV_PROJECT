@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import mongoose from 'mongoose';
+import { connectDB } from '../shared/database';
 import deliveryRoutes from './routes/deliveries';
 import fleetRoutes from './routes/fleet';
 import { getRabbitMQClient } from '../shared/rabbitmq';
@@ -9,7 +9,8 @@ import { getRabbitMQClient } from '../shared/rabbitmq';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3004;
+const PORT = process.env.PORT || 3005;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/deliveries';
 
 // Middleware
 app.use(cors());
@@ -32,8 +33,9 @@ app.get('/health', (req, res) => {
 // Root route
 app.get('/', (req, res) => {
   res.json({
-    service: 'delivery-service',
+    service: 'Delivery Service',
     version: '1.0.0',
+    description: 'Delivery tracking and fleet management',
     endpoints: {
       health: '/health',
       deliveries: '/api/deliveries',
@@ -43,47 +45,26 @@ app.get('/', (req, res) => {
 });
 
 // Connect to MongoDB
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/deliveries');
-    console.log('✅ MongoDB connected');
-  } catch (error) {
-    console.error('❌ MongoDB connection error:', error);
-    process.exit(1);
-  }
-};
+connectDB(MONGO_URI).then(() => {
+  console.log('✅ Delivery Service - MongoDB connected');
 
-// Start server
-const startServer = async () => {
-  try {
-    await connectDB();
+  app.listen(PORT, () => {
+    console.log(`🚚 Delivery Service running on port ${PORT}`);
+  });
+});
 
-    app.listen(PORT, () => {
-      console.log(`🚀 Delivery Service running on port ${PORT}`);
-      console.log(`📍 Health check: http://localhost:${PORT}/health`);
-    });
-
-    // Connect to RabbitMQ
-    try {
-      await getRabbitMQClient();
-      console.log('✅ RabbitMQ connected');
-    } catch (error) {
-      console.error('❌ RabbitMQ connection error:', error);
-    }
-
-    // TODO: Register with Consul
-    // TODO: Setup Socket.io for real-time tracking
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
-  }
-};
-
-startServer();
+// Connect to RabbitMQ
+getRabbitMQClient()
+  .then(() => {
+    console.log('✅ Delivery Service - RabbitMQ connected');
+  })
+  .catch((error) => {
+    console.error('❌ Delivery Service - RabbitMQ connection failed:', error);
+  });
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
+process.on('SIGINT', () => {
   console.log('\n⚠️ Shutting down gracefully...');
-  await mongoose.disconnect();
   process.exit(0);
 });
+

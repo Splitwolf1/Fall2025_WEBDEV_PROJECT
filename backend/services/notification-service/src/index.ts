@@ -9,7 +9,8 @@ dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
-const PORT = process.env.PORT || 3006;
+const PORT = process.env.PORT || 3007;
+const SOCKETIO_PORT = process.env.SOCKETIO_PORT || 3007;
 
 // Socket.io setup
 const io = new SocketIOServer(httpServer, {
@@ -83,7 +84,7 @@ export const sendNotification = (
     createdAt: new Date().toISOString(),
     timestamp: new Date().toISOString(),
   };
-  
+
   console.log(`🔔 Sending notification to user-${userId}:`, notificationData);
   io.to(`user-${userId}`).emit('notification', notificationData);
 };
@@ -105,7 +106,7 @@ export const sendRoleNotification = (
     createdAt: new Date().toISOString(),
     timestamp: new Date().toISOString(),
   };
-  
+
   console.log(`🔔 Sending role notification to role-${role}:`, notificationData);
   io.to(`role-${role}`).emit('notification', notificationData);
 };
@@ -175,7 +176,7 @@ const startServer = async () => {
     try {
       const rabbitmq = await getRabbitMQClient();
       console.log('✅ RabbitMQ connected');
-      
+
       // Subscribe to all farm2table events
       await rabbitmq.subscribe(
         'notification-service-events',
@@ -183,7 +184,7 @@ const startServer = async () => {
         '*', // Listen to all events
         async (eventData) => {
           console.log('📨 Received event:', eventData);
-          
+
           // Route events to appropriate notification handlers
           switch (eventData.type || Object.keys(eventData)[0]) {
             case 'user.created':
@@ -194,7 +195,7 @@ const startServer = async () => {
                 data: eventData
               });
               break;
-              
+
             case 'order.created':
               // Notify customer and farmer
               sendNotification(eventData.customerId, {
@@ -210,7 +211,7 @@ const startServer = async () => {
                 data: eventData
               });
               break;
-              
+
             case 'order.status_updated':
               // Notify customer of status updates
               sendNotification(eventData.customerId, {
@@ -220,7 +221,7 @@ const startServer = async () => {
                 data: eventData
               });
               break;
-              
+
             case 'delivery.status_updated':
               // Notify about delivery updates
               broadcastNotification({
@@ -230,7 +231,7 @@ const startServer = async () => {
                 data: eventData
               });
               break;
-              
+
             case 'inspection.scheduled':
               // Notify inspector and target of scheduled inspection
               sendNotification(eventData.inspectorId, {
@@ -246,7 +247,7 @@ const startServer = async () => {
                 data: eventData
               });
               break;
-              
+
             case 'compliance.violation':
               // Notify about compliance violations (critical)
               sendRoleNotification('inspector', {
@@ -262,13 +263,13 @@ const startServer = async () => {
                 data: eventData
               });
               break;
-              
+
             default:
               console.log('⚠️ Unknown event type:', eventData);
           }
         }
       );
-      
+
       console.log('📢 Notification service subscribed to all events');
     } catch (error) {
       console.error('❌ RabbitMQ connection error:', error);
