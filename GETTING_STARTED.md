@@ -1,338 +1,348 @@
-# 🚀 Getting Started - Backend Setup
+# 🚀 Getting Started with Farm2Table
 
-## Prerequisites
-
-### 1. Install Docker Desktop
-
-**Windows:**
-1. Download Docker Desktop from: https://www.docker.com/products/docker-desktop/
-2. Run the installer
-3. After installation, **start Docker Desktop** from the Start menu
-4. Wait for Docker to fully start (whale icon in system tray will be steady)
-
-**Verify Docker is running:**
-```powershell
-docker --version
-docker-compose --version
-```
-
-### 2. Install Node.js (Optional - for local development)
-
-Download from: https://nodejs.org/
-- Recommended: v20.x LTS
+Welcome to Farm2Table - a microservices-based platform connecting farms to tables!
 
 ---
 
-## Quick Start Options
+## 📋 Prerequisites
 
-### Option A: Docker Compose - Minimal (Recommended for Now)
+Before you start, make sure you have:
 
-This starts only the infrastructure + 3 services we've built so far.
-
-```powershell
-# Make sure you're in the backend directory
-cd c:\Users\Wolf\Desktop\Fall2025_WEBDEV_PROJECT\backend
-
-# Start services
-docker-compose -f docker-compose.minimal.yml up --build
-```
-
-**What this starts:**
-- RabbitMQ (message broker)
-- Consul (service discovery)
-- 3 MongoDB databases
-- User Service (port 3001)
-- Product Service (port 3002)
-- Order Service (port 3003)
-
-**Access URLs:**
-- User Service: http://localhost:3001/health
-- Product Service: http://localhost:3002/health
-- Order Service: http://localhost:3003/health
-- RabbitMQ Management: http://localhost:15672
-  - Username: `farm2table`
-  - Password: `secret`
-- Consul UI: http://localhost:8500
-
-**To stop:**
-```powershell
-# Press Ctrl+C in the terminal
-# OR in a new terminal:
-docker-compose -f docker-compose.minimal.yml down
-```
+- ✅ **Docker Desktop** installed and running
+- ✅ **Node.js** 18+ and npm
+- ✅ **Git** for version control
+- ✅ **8GB+ RAM** for running all containers
 
 ---
 
-### Option B: Docker Compose - Full (After all services are built)
+## 🎯 Quick Start (5 Minutes)
 
-```powershell
-docker-compose up --build
+### **1. Clone & Navigate:**
+```bash
+git clone <repository-url>
+cd Fall2025_WEBDEV_PROJECT
 ```
 
-This will start all 7 microservices + infrastructure (use after all services are implemented).
-
----
-
-### Option C: Local Development (Individual Service)
-
-For developing a single service without Docker:
-
-**1. Start infrastructure only:**
-```powershell
-# Start MongoDB, RabbitMQ, Consul
-docker-compose -f docker-compose.minimal.yml up rabbitmq consul mongo-users mongo-products mongo-orders
+### **2. Start Backend:**
+```bash
+cd backend
+docker-compose up
 ```
 
-**2. Run a service locally:**
-```powershell
-# Example: User Service
-cd services/user-service
+Wait for all services to start (~30 seconds). You should see:
+```
+✅ Auth Service running on port 3001
+✅ User Service running on port 3002
+✅ Product Service running on port 3003
+... (8 services total)
+```
+
+### **3. Start Frontend (New Terminal):**
+```bash
+cd frontend
 npm install
-cp .env.example .env
 npm run dev
 ```
 
+### **4. Access the App:**
+- **Frontend:** http://localhost:3000
+- **API Gateway:** http://localhost:4000
+- **RabbitMQ UI:** http://localhost:15672 (farm2table / secret)
+
 ---
 
-## 🧪 Testing the Services
+## 🏗️ Architecture Overview
 
-### 1. Health Checks
+### **Frontend:**
+- **Framework:** Next.js 16 + React 19
+- **Port:** 3000
+- **UI Library:** Radix UI + Tailwind CSS 4
+- **State:** Zustand + TanStack Query
 
-```powershell
-# User Service
-curl http://localhost:3001/health
+### **Backend:**
+- **Pattern:** Dual Gateway Microservices
+- **Services:** 10 total (8 microservices + 2 gateways)
+- **Database:** MongoDB (9 instances)
+- **Message Broker:** RabbitMQ
+- **Email:** Resend
 
-# Product Service
-curl http://localhost:3002/health
+---
 
-# Order Service
-curl http://localhost:3003/health
+## 🔧 Configuration
+
+### **Optional: Email Notifications**
+
+To enable email notifications:
+
+1. **Get Resend API Key:**
+   - Sign up at https://resend.com
+   - Copy your API key
+
+2. **Set Environment Variable:**
+```bash
+# In backend directory
+echo "RESEND_API_KEY=re_your_key_here" > .env
+
+# Or export directly
+export RESEND_API_KEY=re_your_key_here
 ```
 
-### 2. Register a User
+3. **Restart Notification Service:**
+```bash
+docker-compose restart notification-service
+```
 
-```powershell
-curl -X POST http://localhost:3001/api/auth/register `
-  -H "Content-Type: application/json" `
+---
+
+## 📱 Using the Application
+
+### **1. Register an Account:**
+- Navigate to http://localhost:3000
+- Click "Sign Up"
+- Choose your role (Farmer, Restaurant, Distributor, or Inspector)
+- Fill in your information
+
+### **2. Explore Features:**
+
+**As a Farmer:**
+- Add products to your catalog
+- Manage inventory
+- View and fulfill orders
+- Track inspections
+
+**As a Restaurant:**
+- Browse farm products
+- Place orders
+- Track deliveries
+- View order history
+
+**As a Distributor:**
+- Manage delivery fleet
+- Accept delivery assignments
+- Update delivery status
+- Track routes
+
+**As an Inspector:**
+- Schedule inspections
+- Submit inspection reports
+- Track compliance
+
+---
+
+## 🧪 Testing the System
+
+### **Test API Gateway:**
+```bash
+curl http://localhost:4000/health
+```
+
+### **Test All Services:**
+```bash
+for port in 3001 3002 3003 3004 3005 3006 3007 3008 4000 4001; do
+  echo "Testing port $port..."
+  curl -s http://localhost:$port/health | jq .
+done
+```
+
+### **Test Notifications:**
+```bash
+curl -X POST http://localhost:3007/api/notify \
+  -H "Content-Type: application/json" \
   -d '{
-    "email": "farmer@test.com",
-    "password": "password123",
-    "role": "farmer",
-    "profile": {
-      "firstName": "John",
-      "lastName": "Doe"
-    },
-    "farmDetails": {
-      "farmName": "Green Valley Farm",
-      "location": { "lat": 40.7128, "lng": -74.0060 },
-      "address": "123 Farm Road",
-      "certifications": ["Organic"]
-    }
+    "userId": "test123",
+    "type": "order",
+    "title": "Test Notification",
+    "message": "This is a test"
   }'
-```
-
-### 3. Login
-
-```powershell
-curl -X POST http://localhost:3001/api/auth/login `
-  -H "Content-Type: application/json" `
-  -d '{
-    "email": "farmer@test.com",
-    "password": "password123"
-  }'
-```
-
-**Save the token from the response!**
-
-### 4. Create a Product
-
-```powershell
-# Replace YOUR_JWT_TOKEN with the token from login
-curl -X POST http://localhost:3002/api/products `
-  -H "Content-Type: application/json" `
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" `
-  -d '{
-    "farmerId": "YOUR_USER_ID",
-    "name": "Organic Tomatoes",
-    "category": "vegetables",
-    "description": "Fresh organic tomatoes",
-    "price": 4.99,
-    "unit": "lb",
-    "stockQuantity": 100,
-    "qualityGrade": "A",
-    "certifications": ["Organic"]
-  }'
-```
-
-### 5. Get All Products
-
-```powershell
-curl http://localhost:3002/api/products
 ```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Error: "Cannot connect to Docker daemon"
+### **Backend won't start?**
 
-**Solution:** Start Docker Desktop
-1. Open Docker Desktop from Start menu
-2. Wait for it to fully start (whale icon stops animating)
-3. Try again
-
-### Error: "Port already in use"
-
-**Solution:** Stop other services using the same ports
-```powershell
-# Check what's using the port
-netstat -ano | findstr :3001
-
-# Kill the process (replace PID with the actual process ID)
-taskkill /PID <PID> /F
+**Check Docker:**
+```bash
+docker --version
+docker-compose --version
 ```
 
-### Error: "Cannot find module"
-
-**Solution:** Rebuild containers
-```powershell
-docker-compose -f docker-compose.minimal.yml down
-docker-compose -f docker-compose.minimal.yml up --build
+**Check ports:**
+```bash
+# Make sure ports 3001-3008, 4000-4001 are free
+lsof -i :4000
 ```
 
-### Containers keep restarting
-
-**Solution:** Check logs
-```powershell
-# View logs for a specific service
-docker logs farm2table-user-service
-
-# Follow logs in real-time
-docker logs -f farm2table-user-service
+**View logs:**
+```bash
+docker-compose logs -f
 ```
 
-### MongoDB connection issues
+**Reset everything:**
+```bash
+docker-compose down -v
+docker-compose up --build
+```
 
-**Solution:** Ensure MongoDB containers are running
-```powershell
-# Check running containers
-docker ps | findstr mongo
+### **Frontend won't start?**
 
-# Restart MongoDB
-docker restart farm2table-mongo-users
+**Clear and reinstall:**
+```bash
+cd frontend
+rm -rf node_modules package-lock.json
+npm install
+npm run dev
+```
+
+**Check Node version:**
+```bash
+node --version  # Should be 18+
+```
+
+### **Services keep restarting?**
+
+Check individual service logs:
+```bash
+docker-compose logs -f auth-service
+docker-compose logs -f notification-service
+```
+
+Common issues:
+- MongoDB connection failed → Wait longer for MongoDB to start
+- RabbitMQ connection failed → Check RabbitMQ is running
+- Port conflict → Another app using the port
+
+---
+
+## 📁 Project Structure
+
+```
+Farm2Table/
+├── frontend/              # Next.js application
+│   ├── src/
+│   │   ├── app/          # Pages (App Router)
+│   │   ├── components/   # UI components
+│   │   ├── hooks/        # Custom hooks
+│   │   └── lib/          # API client, utilities
+│   └── package.json
+│
+├── backend/
+│   ├── gateways/         # API Gateways
+│   │   ├── external-api-gateway/  # Port 4000
+│   │   └── internal-api-gateway/  # Port 4001
+│   │
+│   ├── services/         # Microservices
+│   │   ├── auth-service/         # Port 3001
+│   │   ├── user-service/         # Port 3002
+│   │   ├── product-service/      # Port 3003
+│   │   ├── order-service/        # Port 3004
+│   │   ├── delivery-service/     # Port 3005
+│   │   ├── health-service/       # Port 3006
+│   │   ├── notification-service/ # Port 3007
+│   │   └── chatbot-service/      # Port 3008
+│   │
+│   ├── shared/           # Shared modules
+│   │   ├── database.ts   # MongoDB connection
+│   │   ├── rabbitmq.ts   # Message broker
+│   │   └── consul.ts     # Service discovery
+│   │
+│   ├── docker-compose.yml
+│   ├── sync-shared.js    # Sync shared modules
+│   └── RESEND_SETUP_GUIDE.md
+│
+└── Documentation/
+    ├── QUICK_REFERENCE_CARD.md
+    ├── BACKEND_ARCHITECTURE_QA.md
+    ├── MICROSERVICES_EXPLAINED.md
+    ├── PROJECT_STRUCTURE.md
+    └── GETTING_STARTED.md (this file)
 ```
 
 ---
 
-## 📊 Monitoring
+## 🔑 Default Credentials
 
-### View All Running Containers
+### **RabbitMQ Management UI:**
+- URL: http://localhost:15672
+- Username: `farm2table`
+- Password: `secret`
 
-```powershell
-docker ps
-```
-
-### View Logs
-
-```powershell
-# All services
-docker-compose -f docker-compose.minimal.yml logs
-
-# Specific service
-docker logs farm2table-user-service
-
-# Follow logs
-docker logs -f farm2table-user-service
-```
-
-### RabbitMQ Management UI
-
-1. Open: http://localhost:15672
-2. Login:
-   - Username: `farm2table`
-   - Password: `secret`
-3. View:
-   - Queues
-   - Exchanges
-   - Connections
-   - Message rates
-
-### Consul UI
-
-1. Open: http://localhost:8500
-2. View:
-   - Registered services
-   - Health checks
-   - Service discovery
+### **MongoDB:**
+- No authentication in development
+- Each service has its own database
 
 ---
 
-## 🧹 Cleanup
+## 🚀 Next Steps
 
-### Stop all containers
+1. ✅ **Explore the codebase**
+   - Read `QUICK_REFERENCE_CARD.md` for quick overview
+   - Read `BACKEND_ARCHITECTURE_QA.md` for architecture details
 
-```powershell
-docker-compose -f docker-compose.minimal.yml down
-```
+2. ✅ **Try making changes**
+   - Add a new product
+   - Place an order
+   - Track delivery
 
-### Remove all data volumes
+3. ✅ **Set up email notifications** (optional)
+   - Follow `backend/RESEND_SETUP_GUIDE.md`
 
-```powershell
-docker-compose -f docker-compose.minimal.yml down -v
-```
-
-### Remove all images
-
-```powershell
-docker-compose -f docker-compose.minimal.yml down --rmi all
-```
+4. ✅ **Learn the architecture**
+   - Read `MICROSERVICES_EXPLAINED.md`
+   - Read `PROJECT_STRUCTURE.md`
 
 ---
 
-## 🎯 Next Steps
+## 📚 Additional Resources
 
-Once services are running:
-
-1. Test all endpoints with Postman or curl
-2. Check RabbitMQ Management UI
-3. Verify services in Consul UI
-4. Start building remaining services
-5. Integrate RabbitMQ events
+- **Quick Reference:** `QUICK_REFERENCE_CARD.md`
+- **Backend Details:** `BACKEND_ARCHITECTURE_QA.md`
+- **Microservices Guide:** `MICROSERVICES_EXPLAINED.md`
+- **Project Structure:** `PROJECT_STRUCTURE.md`
+- **Email Setup:** `backend/RESEND_SETUP_GUIDE.md`
 
 ---
 
-## 💡 Pro Tips
+## 💡 Tips
 
-1. **Use Docker Desktop Dashboard** - Visual interface to manage containers
-2. **Keep Docker Desktop running** - Required for all Docker commands
-3. **Use minimal compose file** - Faster startup during development
-4. **Check logs frequently** - Helps catch errors early
-5. **Restart containers** - If you change environment variables
+1. **Keep Docker Desktop running** - All backend services run in containers
+2. **Check logs frequently** - Use `docker-compose logs -f` to debug
+3. **Test incrementally** - Start one service at a time if needed
+4. **Use health checks** - All services have `/health` endpoints
+5. **Browser DevTools** - Check Network tab for API calls
 
 ---
 
-## 📚 Useful Commands
+## 🎯 Development Workflow
 
-```powershell
-# Start in detached mode (background)
-docker-compose -f docker-compose.minimal.yml up -d
+### **Making Backend Changes:**
+```bash
+# 1. Edit code in services/
+# 2. Rebuild specific service
+docker-compose up --build auth-service
 
-# Stop services
-docker-compose -f docker-compose.minimal.yml stop
+# 3. Or rebuild all
+docker-compose up --build
+```
 
-# Start stopped services
-docker-compose -f docker-compose.minimal.yml start
+### **Making Frontend Changes:**
+- Changes hot-reload automatically
+- No restart needed
 
-# Rebuild specific service
-docker-compose -f docker-compose.minimal.yml up --build user-service
+### **Adding Dependencies:**
+```bash
+# Backend (in service directory)
+cd backend/services/auth-service
+npm install new-package
 
-# View container shell
-docker exec -it farm2table-user-service sh
-
-# View MongoDB shell
-docker exec -it farm2table-mongo-users mongosh
+# Frontend
+cd frontend
+npm install new-package
 ```
 
 ---
 
-**Need help?** Check the [README.md](README.md) for architecture details and API documentation.
+**Need Help?** Check the troubleshooting section or review the documentation files!
+
+**Ready to code!** 🎉

@@ -41,7 +41,7 @@ The dual notification system (browser + email) has been implemented in the backe
 ```bash
 # Create .env file in backend directory
 cd backend
-echo "RESEND_API_KEY=re_your_api_key_here" > .env
+echo "" > .env
 ```
 
 **Option B: Direct Export (Testing)**

@@ -1,352 +1,310 @@
-# 🚀 Quick Reference Card - Print This!
+# 🚀 Farm2Table - Quick Reference Card
 
-## 📋 Architecture at a Glance
+## 📋 Architecture Overview
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                        APP ARCHITECTURE                      │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    DUAL GATEWAY ARCHITECTURE                    │
+└─────────────────────────────────────────────────────────────────┘
 
 Frontend (localhost:3000)
     │
-    │ HTTP Requests
+    │ HTTP/WebSocket
     ↓
-API Gateway (localhost:4000) ←─────┐
-    │                               │
-    ├─→ User Service (3001)         │
-    ├─→ Product Service (3002)      │ Service
-    ├─→ Order Service (3003)        │ Discovery
-    ├─→ Delivery Service (3004)     │ (Consul)
-    ├─→ Health Service (3005)       │
-    ├─→ Notification Service (3006) │
-    └─→ Chatbot Service (3007) ─────┘
+External API Gateway (localhost:4000) ←── Client Requests
+    │                                      JWT Auth, Rate Limiting
+    ├─→ Auth Service (3001)               
+    ├─→ User Service (3002)               
+    ├─→ Product Service (3003)            
+    ├─→ Order Service (3004)              
+    ├─→ Delivery Service (3005)           
+    ├─→ Health Service (3006)             
+    ├─→ Notification Service (3007) ─┬─→ Socket.io (Real-time)
+    └─→ Chatbot Service (3008)       └─→ Resend (Email)
          │                  ↑
-         │ Async Messages   │
+         │                  │
          ↓                  │
-    RabbitMQ (5672) ────────┘
+    RabbitMQ (5672) ────────┴─ Event Bus
+         ↑                  │
+         │                  ↓
+Internal API Gateway (localhost:4001) ←── Service-to-Service
+    Service Authentication & Routing
 ```
 
 ---
 
-## 🔑 Key Technologies (Memorize This!)
+## 🚀 Quick Start Commands
 
-### 1. Cookies
-```
-What: Small data stored in browser
-Why: Automatic sending to server
-Where: user-role=farmer
-Max-age: 604800 seconds (7 days)
-```
-
-### 2. RabbitMQ
-```
-What: Message broker (post office)
-Why: Async communication between services
-Port: 5672 (main), 15672 (UI)
-Login: farm2table / secret
-```
-
-### 3. API Gateway
-```
-What: Single entry point to all services
-Why: Routing, auth, service discovery
-Port: 4000
-Routes: /api/* → correct service
-```
-
-### 4. Microservices
-```
-What: 7 independent services
-Why: Scalability, fault isolation
-Count: 7 services + 1 gateway = 8 total
-```
-
-### 5. Docker
-```
-What: Containerization platform
-Why: Consistent environment everywhere
-Command: docker-compose up
-Containers: 15 total
-```
-
----
-
-## 🎯 Answer Any Question Format
-
-```
-Q: "What is [TECHNOLOGY]?"
-
-Answer Template:
-1. Simple analogy
-2. What it does in our app
-3. Why we chose it
-4. One cool feature
-
-Example:
-Q: "What is RabbitMQ?"
-A: "RabbitMQ is like a post office for our microservices.
-   When a user places an order, the Order Service sends a
-   message to RabbitMQ saying 'new order created'. RabbitMQ
-   then delivers this message to the Notification Service,
-   which sends an email to the restaurant. We chose RabbitMQ
-   because services don't have to wait for each other -
-   everything happens asynchronously. The cool part? If the
-   Notification Service is down, RabbitMQ keeps the message
-   until it's back up, so we never lose data."
-```
-
----
-
-## 📊 The Numbers (Impress Them!)
-
-```
-Microservices:        7
-API Gateway:          1
-Docker Containers:    15 total
-MongoDB Databases:    5 (one per service)
-Message Broker:       1 (RabbitMQ)
-Service Discovery:    1 (Consul)
-
-Ports Used:
-- Frontend:          3000
-- API Gateway:       4000
-- User Service:      3001
-- Product Service:   3002
-- Order Service:     3003
-- Delivery Service:  3004
-- Health Service:    3005
-- Notification:      3006
-- Chatbot:           3007
-- RabbitMQ:          5672, 15672
-- Consul:            8500
-- MongoDB:           27017-27021
-
-Total Lines of Code:  ~15,000+
-Session Duration:     7 days
-JWT Token Security:   256-bit encrypted
-```
-
----
-
-## 🎬 Demo Script (60 seconds)
-
-```
-"Let me show you our architecture.
-
-[Open localhost:3000]
-This is the React frontend. When I click 'Add Product'...
-
-[Open F12 → Network]
-...the request goes to our API Gateway at port 4000.
-
-[Click request → Headers]
-Notice the Authorization header with our JWT token.
-
-[Open localhost:15672]
-This is RabbitMQ's management interface. When I create
-an order...
-
-[Create order in app]
-[Refresh RabbitMQ]
-...you'll see a message appear here. The Order Service
-published 'order.created' and Notification Service will
-consume it to send emails.
-
-[Open localhost:8500]
-This is Consul showing all our microservices. Each service
-registers itself here, and the API Gateway uses this to
-find available services.
-
-[Terminal: docker ps]
-Here are our 15 Docker containers running. Each service
-is isolated in its own container with its own database.
-
-That's our microservices architecture in action!"
-```
-
----
-
-## 🐛 Debugging Quick Reference
-
-### Check if services are running:
+### **Start Everything:**
 ```bash
-docker ps
-# Should show 15 containers
+# Backend (in backend/)
+docker-compose up
+
+# Frontend (in frontend/)
+npm run dev
 ```
 
-### View service logs:
+### **Access Points:**
+- **Frontend:** http://localhost:3000
+- **External API:** http://localhost:4000
+- **Internal API:** http://localhost:4001
+- **RabbitMQ UI:** http://localhost:15672 (farm2table / secret)
+
+---
+
+## 🎯 Services & Ports
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| **External Gateway** | 4000 | Client requests |
+| **Internal Gateway** | 4001 | Service-to-service |
+| **Auth Service** | 3001 | Login/Register |
+| **User Service** | 3002 | Profile management |
+| **Product Service** | 3003 | Product catalog |
+| **Order Service** | 3004 | Order management |
+| **Delivery Service** | 3005 | Delivery tracking |
+| **Health Service** | 3006 | Inspections |
+| **Notification Service** | 3007 | Real-time + Email |
+| **Chatbot Service** | 3008 | AI Assistant |
+
+---
+
+## 🔑 Key Technologies
+
+### **1. Dual Gateway Pattern**
+- **External (4000):** Public API for clients
+- **Internal (4001):** Private API for services
+- **Why:** Security, scalability, monitoring
+
+### **2. RabbitMQ (Message Broker)**
+- **Port:** 5672 (AMQP), 15672 (Management UI)
+- **Credentials:** farm2table / secret
+- **Purpose:** Async event communication
+- **Events:** order.created, delivery.updated, etc.
+
+### **3. Socket.io (Real-time)**
+- **Port:** 3007 (Notification Service)
+- **Purpose:** Live notifications to users
+- **Features:** Room-based messaging, auto-reconnect
+
+### **4. Resend (Email Service)**
+- **API:** Integrated in Notification Service
+- **Templates:** Orders, Deliveries, Inspections
+- **Domain:** noreply@resend.dev (test mode)
+
+### **5. Docker Compose**
+- **Containers:** 19 total (10 services + 9 databases)
+- **Networks:** farm2table-network
+- **Volumes:** Named volumes for persistence
+
+---
+
+## 📁 Project Structure
+
+```
+Farm2Table/
+├── frontend/               # Next.js 16 + React 19
+│   ├── src/
+│   │   ├── app/           # App router pages
+│   │   ├── components/    # UI components
+│   │   ├── hooks/         # useNotifications, etc.
+│   │   └── lib/           # API client, utils
+│   └── package.json
+│
+├── backend/
+│   ├── gateways/          # API Gateways
+│   │   ├── external-api-gateway/  (4000)
+│   │   └── internal-api-gateway/  (4001)
+│   │
+│   ├── services/          # Microservices
+│   │   ├── auth-service/         (3001)
+│   │   ├── user-service/         (3002)
+│   │   ├── product-service/      (3003)
+│   │   ├── order-service/        (3004)
+│   │   ├── delivery-service/     (3005)
+│   │   ├── health-service/       (3006)
+│   │   ├── notification-service/ (3007)
+│   │   └── chatbot-service/      (3008)
+│   │
+│   ├── shared/            # Shared modules
+│   │   ├── database.ts
+│   │   ├── rabbitmq.ts
+│   │   └── consul.ts
+│   │
+│   ├── docker-compose.yml
+│   └── sync-shared.js     # Sync shared modules
+│
+└── Documentation files
+```
+
+---
+
+## 🔐 Authentication Flow
+
+```
+1. User → POST /api/auth/login → Auth Service (3001)
+2. Auth Service → Returns JWT token
+3. Frontend → Stores token in localStorage + cookie
+4. Future requests → Include JWT in Authorization header
+5. External Gateway → Validates JWT → Routes to service
+```
+
+---
+
+## 📬 Notification System
+
+### **Dual Channel Delivery:**
+1. **Browser (Socket.io):** Instant real-time updates
+2. **Email (Resend):** Persistent notifications
+
+### **Notification Types:**
+- 📦 Order confirmations & updates
+- 🚚 Delivery tracking
+- 🔍 Inspection scheduling
+- 💬 Messages & alerts
+
+### **Frontend Usage:**
+```tsx
+import { useNotifications } from '@/hooks/useNotifications';
+
+const { notifications, unreadCount, isConnected } = useNotifications();
+```
+
+---
+
+## 🧪 Testing Endpoints
+
+### **Health Checks:**
 ```bash
-docker logs farm2table-user-service
-docker logs farm2table-api-gateway
+# Test all services
+for port in 3001 3002 3003 3004 3005 3006 3007 3008 4000 4001; do
+  curl http://localhost:$port/health
+done
 ```
 
-### Check RabbitMQ messages:
-```
-Open: http://localhost:15672
-Login: farm2table / secret
-Click: Queues tab
-```
-
-### Check service registration:
-```
-Open: http://localhost:8500
-Click: Services
-Should show: 7 services
-```
-
-### Test API Gateway:
+### **Send Test Notification:**
 ```bash
-curl http://localhost:4000/health
-# Should return: {"status":"ok"}
+curl -X POST http://localhost:3007/api/notify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "test123",
+    "type": "order",
+    "title": "Test Order",
+    "message": "This is a test"
+  }'
 ```
 
 ---
 
-## 💡 Common Questions - Quick Answers
+## 🛠️ Common Commands
 
-**"Why microservices?"**
-→ Scalability, fault isolation, independent deployment
+### **Backend:**
+```bash
+# Start all services
+docker-compose up
 
-**"Why RabbitMQ?"**
-→ Async communication, message reliability, decoupling
+# Start specific service
+docker-compose up auth-service
 
-**"Why Docker?"**
-→ Consistent environment, easy deployment, isolation
+# Rebuild after code changes
+docker-compose up --build
 
-**"Why API Gateway?"**
-→ Single entry point, centralized auth, service discovery
+# View logs
+docker-compose logs -f notification-service
 
-**"Why separate databases?"**
-→ Data isolation, independent scaling, service autonomy
+# Stop everything
+docker-compose down
 
-**"How do you handle failures?"**
-→ Message queuing, retry logic, circuit breakers
-
-**"How do you scale?"**
-→ Docker container replication, load balancing
-
-**"What about security?"**
-→ JWT tokens, HTTPS in production, HttpOnly cookies
-
----
-
-## 🎯 The Perfect Answer Structure
-
+# Clean up
+docker-compose down --remove-orphans
+docker system prune -f
 ```
-1. WHAT (10 seconds)
-   "It's a [simple analogy]"
 
-2. WHY (10 seconds)
-   "We use it because [benefit]"
+### **Frontend:**
+```bash
+# Development
+npm run dev
 
-3. HOW (10 seconds)
-   "In our app, it [specific example]"
+# Build
+npm run build
 
-4. PROOF (10 seconds)
-   "Let me show you [open something]"
+# Production
+npm start
 
-Total: 40 seconds = Perfect answer!
+# Lint
+npm run lint
 ```
 
 ---
 
-## 🔥 Impressive Facts to Drop
+## 🔍 Debugging Tips
 
-1. "Our architecture can handle 10,000 concurrent users by
-   scaling individual services independently."
+### **Service Not Starting?**
+1. Check logs: `docker-compose logs service-name`
+2. Check port conflicts: `lsof -i :PORT`
+3. Rebuild: `docker-compose up --build service-name`
 
-2. "If the Notification Service crashes, users can still
-   login, browse, and order. That's fault isolation."
+### **Database Issues?**
+1. Check MongoDB logs: `docker-compose logs mongo-users`
+2. Reset data: `docker-compose down -v`
 
-3. "We use the database-per-service pattern, meaning each
-   microservice owns its data completely."
+### **RabbitMQ Issues?**
+1. Check UI: http://localhost:15672
+2. Check exchanges and queues
+3. Look for connection errors in service logs
 
-4. "With Docker, setting up this entire stack takes one
-   command: docker-compose up. That's 15 containers!"
-
-5. "RabbitMQ ensures we never lose messages. If a service
-   is down, messages wait in queue until it's back."
-
-6. "JWT tokens contain encrypted user data, so the backend
-   doesn't need to query the database on every request."
-
-7. "Our API Gateway uses Consul for service discovery,
-   meaning services can move around and it finds them
-   automatically."
+### **Email Not Sending?**
+1. Check RESEND_API_KEY is set
+2. Verify event has `customerEmail` field
+3. Check notification-service logs
 
 ---
 
-## 📱 URLs to Remember
+## 📚 Key Files
 
-```
-Frontend:          http://localhost:3000
-API Gateway:       http://localhost:4000
-RabbitMQ UI:       http://localhost:15672
-Consul UI:         http://localhost:8500
-
-Credentials:
-- RabbitMQ:  farm2table / secret
-- MongoDB:   No auth (dev mode)
-```
+| File | Purpose |
+|------|---------|
+| `docker-compose.yml` | Service orchestration |
+| `sync-shared.js` | Sync shared modules |
+| `api-client.ts` | Frontend API wrapper |
+| `email-service.ts` | Email templates |
+| `RESEND_SETUP_GUIDE.md` | Email setup instructions |
 
 ---
 
-## 🎓 One-Liner Explanations
+## 🎓 Architecture Decisions
 
-**Cookies:**
-"Small data stored in browser and automatically sent with every request."
+1. **Why Dual Gateways?**
+   - External: Public API, JWT auth, rate limiting
+   - Internal: Service-to-service, API key auth
+   - Better security & monitoring
 
-**RabbitMQ:**
-"Message broker that lets services communicate asynchronously."
+2. **Why Separate Auth Service?**
+   - Isolated authentication logic
+   - Easier to scale
+   - Better security
 
-**API Gateway:**
-"Single entry point that routes requests to the right microservice."
+3. **Why RabbitMQ?**
+   - Async communication
+   - Event-driven architecture
+   - Decoupled services
 
-**Microservices:**
-"Small, independent services that each do one thing well."
-
-**Docker:**
-"Packages apps into containers that run consistently everywhere."
-
-**JWT:**
-"Encrypted token containing user info that proves identity."
-
-**Consul:**
-"Service registry that helps API Gateway find available services."
-
----
-
-## 🚦 Traffic Light System
-
-### 🟢 GREEN (Easy Questions)
-- What is a cookie?
-- What is Docker?
-- Why use microservices?
-
-### 🟡 YELLOW (Medium Questions)
-- How do services communicate?
-- What happens if a service crashes?
-- How does the API Gateway work?
-
-### 🔴 RED (Hard Questions)
-- How do you handle distributed transactions?
-- What's your scaling strategy?
-- How do you ensure data consistency?
-
-**Strategy:** Start with green, show confidence, then tackle yellow/red.
+4. **Why Socket.io + Email?**
+   - Socket.io: Real-time updates
+   - Email: Persistent notifications
+   - Users don't miss important updates
 
 ---
 
-## 🎯 If You Forget Everything, Remember This
+## 📊 Performance Metrics
 
-```
-MICROSERVICES + DOCKER + RABBITMQ + API GATEWAY
-
-= Scalable, Fault-Tolerant, Independently Deployable
-  Architecture That Can Handle Growth
-```
+- **Services:** 10 (8 microservices + 2 gateways)
+- **Databases:** 9 MongoDB instances
+- **Containers:** 19 total
+- **Network:** Single Docker network
+- **Startup Time:** ~30 seconds
 
 ---
 
-*Print this card and keep it handy! 🚀*
-*Last updated: November 7, 2025*
+**Last Updated:** December 2025  
+**Version:** 2.0 (Dual Gateway Architecture)

@@ -62,11 +62,11 @@ router.use(
         timeout: 30000,
         proxyTimeout: 30000,
         onProxyReq: (proxyReq, req: any) => {
-            // Forward user info from JWT
+            // Forward user info from JWT (only if defined)
             if (req.user) {
-                proxyReq.setHeader('X-User-Id', req.user.userId);
-                proxyReq.setHeader('X-User-Email', req.user.email);
-                proxyReq.setHeader('X-User-Role', req.user.role);
+                if (req.user.userId) proxyReq.setHeader('X-User-Id', req.user.userId);
+                if (req.user.email) proxyReq.setHeader('X-User-Email', req.user.email);
+                if (req.user.role) proxyReq.setHeader('X-User-Role', req.user.role);
             }
             if (req.body) {
                 const bodyData = JSON.stringify(req.body);

@@ -1,144 +1,335 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Farm2Table - Frontend Documentation
 
-## 🚀 Getting Started
+## 🎯 Overview
 
-### Prerequisites
-
-- **Node.js** 20+ (LTS)
-- **Docker Desktop** (for backend services)
-- **npm** or **yarn** or **pnpm**
+Modern Next.js 16 + React 19 frontend for the Farm2Table platform.
 
 ---
 
-## 📦 Backend Setup
-
-The backend uses Docker Compose to run all microservices and infrastructure.
-
-### ⚠️ IMPORTANT: Start Docker Desktop First!
-
-**Before starting backend services, make sure Docker Desktop is running!**
-
-1. **Open Docker Desktop** application on your computer
-2. Wait for Docker Desktop to fully start (you'll see "Docker Desktop is running" in the system tray)
-3. Then proceed with the commands below
-
-### Start Backend Services
-
-**Location:** Run commands from the `backend` directory
+## 🚀 Quick Start
 
 ```bash
-# Navigate to backend directory
-cd backend
-
-# Start all services (minimal setup - 3 services)
-docker-compose -f docker-compose.minimal.yml up --build
-
-# OR start all services (full setup - all services)
-docker-compose up --build
-```
-
-**Backend Services:**
-- User Service: http://localhost:3001
-- Product Service: http://localhost:3002
-- Order Service: http://localhost:3003
-- RabbitMQ Management: http://localhost:15672 (username: `farm2table`, password: `secret`)
-- Consul UI: http://localhost:8500
-
-**Stop Backend Services:**
-```bash
-# From backend directory
-cd backend
-docker-compose -f docker-compose.minimal.yml down
-```
-
-**Note:** No `.env` files needed for backend - all environment variables are configured in `docker-compose.yml`
-
----
-
-## 🎨 Frontend Setup
-
-### Start Frontend Development Server
-
-**Location:** Run commands from the `frontend` directory
-
-```bash
-# Navigate to frontend directory
-cd frontend
-
-# Install dependencies (first time only)
+# Install dependencies
 npm install
 
 # Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# Build for production
+npm run build
+
+# Start production server
+npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-The page auto-updates as you edit files.
+**Access:** http://localhost:3000
 
 ---
 
-## 🔄 Running the Full Stack
+## 📦 Tech Stack
 
-### ⚠️ IMPORTANT: Start Docker Desktop First!
+- **Framework:** Next.js 16.0.8 (App Router)
+- **React:** 19.2.0
+- **UI Library:** Radix UI primitives
+- **Styling:** Tailwind CSS 4
+- **Forms:** React Hook Form + Zod validation
+- **State:** Zustand
+- **Data Fetching:** TanStack Query
+- **Real-time:** Socket.io-client
+- **Charts:** Recharts
+- **Notifications:** Sonner (toast)
 
-**Before starting backend services, make sure Docker Desktop is running!**
+---
 
-1. **Open Docker Desktop** application on your computer
-2. Wait for Docker Desktop to fully start (you'll see "Docker Desktop is running" in the system tray)
-3. Then proceed with Step 1 below
+## 🏗️ Project Structure
 
-### Step 1: Start Backend (Terminal 1)
-```bash
-cd backend
-docker-compose -f docker-compose.minimal.yml up --build
+```
+frontend/
+├── src/
+│   ├── app/              # App Router pages
+│   │   ├── (auth)/       # Auth layouts
+│   │   ├── (dashboard)/  # Protected routes
+│   │   ├── layout.tsx    # Root layout
+│   │   └── page.tsx      # Home page
+│   │
+│   ├── components/       # UI Components
+│   │   ├── ui/          # Radix UI components
+│   │   ├── layout/      # Layout components
+│   │   └── features/    # Feature-specific components
+│   │
+│   ├── hooks/           # Custom Hooks
+│   │   ├── useNotifications.ts
+│   │   ├── useAuth.ts
+│   │   └── useSocket.ts
+│   │
+│   ├── lib/             # Utilities
+│   │   ├── api-client.ts    # API wrapper
+│   │   ├── socket-client.ts # Socket.io wrapper
+│   │   ├── auth.ts          # Auth helpers
+│   │   └── utils.ts         # Common utilities
+│   │
+│   └── types/           # TypeScript types
+│
+├── public/              # Static assets
+├── .env.local           # Environment variables
+└── package.json
 ```
 
-### Step 2: Start Frontend (Terminal 2)
+---
+
+## 🔧 Configuration
+
+### **Environment Variables:**
+
+Create `.env.local`:
+```env
+# API URLs
+NEXT_PUBLIC_API_URL=http://localhost:4000
+NEXT_PUBLIC_NOTIFICATION_URL=http://localhost:3007
+
+# Optional: Analytics, etc.
+```
+
+---
+
+## 🎨 Components
+
+### **UI Components (Radix UI):**
+- Avatar
+- Button
+- Checkbox
+- Dialog
+- Dropdown Menu
+- Input
+- Label
+- Select
+- Toast (Sonner)
+- Tabs
+- Switch
+- And more...
+
+All styled with Tailwind CSS.
+
+### **Custom Hooks:**
+
+#### **useNotifications:**
+```tsx
+import { useNotifications } from '@/hooks/useNotifications';
+
+const { notifications, unreadCount, isConnected, markAsRead } = useNotifications();
+```
+
+#### ** useAuth:**
+```tsx
+import { useAuth } from '@/hooks/useAuth';
+
+const { user, isAuthenticated, login, logout } = useAuth();
+```
+
+---
+
+## 🔗 API Integration
+
+### **API Client:**
+
+Located at `src/lib/api-client.ts`:
+
+```tsx
+import { apiClient } from '@/lib/api-client';
+
+// Authentication
+await apiClient.login(email, password);
+await apiClient.register(userData);
+
+// Products
+const products = await apiClient.getProducts();
+const product = await apiClient.getProduct(id);
+
+// Orders
+const orders = await apiClient.getOrders();
+await apiClient.createOrder(orderData);
+
+// Notifications
+await apiClient.sendNotification(userId, notification);
+```
+
+### **API Endpoints:**
+
+All requests go through External Gateway (port 4000):
+- `/api/auth/*` → Auth Service
+- `/api/users/*` → User Service
+- `/api/products/*` → Product Service
+- `/api/orders/*` → Order Service
+- `/api/deliveries/*` → Delivery Service
+- `/api/inspections/*` → Health Service
+- `/api/chat/*` → Chatbot Service
+
+---
+
+## 📬 Real-time Notifications
+
+### **Socket.io Integration:**
+
+```tsx
+import { useNotifications } from '@/hooks/useNotifications';
+
+function MyComponent() {
+  const { notifications, unreadCount, isConnected } = useNotifications();
+  
+  return (
+    <div>
+      <p>Status: {isConnected ? 'Connected' : 'Disconnected'}</p>
+      <p>Unread: {unreadCount}</p>
+      {notifications.map(notif => (
+        <div key={notif._id}>{notif.message}</div>
+      ))}
+    </div>
+  );
+}
+```
+
+Notifications appear as:
+1. **Toast notifications** (Sonner)
+2. **In-app notification list**
+3. **Browser notifications** (if permitted)
+
+---
+
+## 🎯 Features
+
+### **Authentication:**
+- Register with role selection
+- Email/password login
+- JWT token management
+- Protected routes
+- Role-based access
+
+### **Dashboard:**
+- Role-specific views
+- Real-time data
+- Charts and analytics
+- Notification center
+
+### **Products:**
+- Browse catalog
+- Search and filter
+- Product details
+- Add to cart
+
+### **Orders:**
+- Order creation
+- Order tracking
+- Status updates
+- Rating system
+
+### **Deliveries:**
+- Real-time tracking
+- Status updates
+- Fleet management (Distributors)
+
+### **Notifications:**
+- Real-time Socket.io
+- Email notifications
+- Toast notifications
+- Notification history
+
+---
+
+## 🧪 Development
+
+### **Running Dev Server:**
 ```bash
-cd frontend
-npm install  # First time only
 npm run dev
 ```
 
-### Step 3: Access the Application
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:3001 (User Service), http://localhost:3002 (Product Service), etc.
+Hot reload enabled - changes appear instantly!
+
+### **Linting:**
+```bash
+npm run lint
+```
+
+### **Building:**
+```bash
+npm run build
+npm start
+```
 
 ---
 
-## 📁 Project Structure
+## 📝 Adding New Features
 
-```
-Fall2025_WEBDEV_PROJECT/
-├── backend/          # Backend microservices (run commands here)
-│   ├── services/
-│   ├── api-gateway/
-│   └── docker-compose.yml
-└── frontend/         # Next.js frontend (run commands here)
-    ├── src/
-    └── package.json
+### **1. Create New Page:**
+```tsx
+// src/app/new-page/page.tsx
+export default function NewPage() {
+  return <div>New Page</div>;
+}
 ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### **2. Create Component:**
+```tsx
+// src/components/features/MyComponent.tsx
+export function MyComponent() {
+  return <div>My Component</div>;
+}
+```
 
-## Learn More
+### **3. Add API Endpoint:**
+```tsx
+// In src/lib/api-client.ts
+async getMyData() {
+  return this.request('/api/my-endpoint');
+}
+```
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🐛 Troubleshooting
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### **API Not Connecting:**
+- Check `NEXT_PUBLIC_API_URL` in `.env.local`
+- Verify backend is running on port 4000
+- Check browser console for errors
 
-## Deploy on Vercel
+### **Notifications Not Working:**
+- Check Socket.io connection status
+- Verify notification service is running (port 3007)
+- Check browser console for Socket.io errors
 
-The easiest way to deploy THE Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### **Build Errors:**
+- Clear `.next` folder: `rm -rf .next`
+- Reinstall dependencies: `rm -rf node_modules && npm install`
+- Check TypeScript errors: `npm run build`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## 🚀 Deployment
+
+### **Production Build:**
+```bash
+npm run build
+npm start
+```
+
+### **Environment Variables:**
+Set production API URL:
+```env
+NEXT_PUBLIC_API_URL=https://api.yourdomain.com
+NEXT_PUBLIC_NOTIFICATION_URL=https://notifications.yourdomain.com
+```
+
+---
+
+## 📚 Learn More
+
+- [Next.js Documentation](https://nextjs.org/docs)
+- [React Documentation](https://react.dev)
+- [Tailwind CSS](https://tailwindcss.com/docs)
+- [Radix U](https://www.radix-ui.com)
+- [Socket.io Client](https://socket.io/docs/v4/client-api/)
+
+---
+
+**Last Updated:** December 2025  
+**Version:** 2.0
