@@ -84,7 +84,7 @@ class ApiClient {
       });
 
       clearTimeout(timeoutId);
-      
+
       // Handle non-JSON responses
       let data;
       const contentType = response.headers.get('content-type');
@@ -160,11 +160,11 @@ class ApiClient {
   }
 
   async getCurrentUser(): Promise<{ success: boolean; user?: any; message?: string }> {
-    return this.request<{ success: boolean; user?: any; message?: string }>('/api/auth/me');
+    return this.request<{ success: boolean; user?: any; message?: string }>('/api/users/me');
   }
 
   async updateProfile(updates: any): Promise<{ success: boolean; user?: any; message?: string }> {
-    return this.request<{ success: boolean; user?: any; message?: string }>('/api/auth/profile', {
+    return this.request<{ success: boolean; user?: any; message?: string }>('/api/users/profile', {
       method: 'PATCH',
       body: JSON.stringify(updates),
     });
@@ -172,7 +172,7 @@ class ApiClient {
 
   // Get all users by role (e.g., all farmers for suppliers)
   async getUsersByRole(role: string) {
-    return this.request(`/api/auth/users?role=${role}`);
+    return this.request(`/api/users?role=${role}`);
   }
 
   // Product endpoints
@@ -305,10 +305,10 @@ class ApiClient {
   }
 
   async updateDeliveryStatus(
-    id: string, 
-    status: string, 
-    note?: string, 
-    location?: any, 
+    id: string,
+    status: string,
+    note?: string,
+    location?: any,
     distributorId?: string,
     vehicleId?: string,
     driverId?: string,
@@ -317,10 +317,10 @@ class ApiClient {
   ) {
     return this.request(`/api/deliveries/${id}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ 
-        status, 
-        note, 
-        location, 
+      body: JSON.stringify({
+        status,
+        note,
+        location,
         distributorId,
         vehicleId,
         driverId,
@@ -427,7 +427,7 @@ class ApiClient {
     if (type) params.append('type', type);
     if (page) params.append('page', page.toString());
     if (limit) params.append('limit', limit.toString());
-    
+
     return this.request(`/api/ratings/user/${userId}?${params.toString()}`);
   }
 

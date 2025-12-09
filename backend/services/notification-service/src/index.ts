@@ -4,6 +4,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { getRabbitMQClient } from '../shared/rabbitmq';
+import { emailService } from './email-service';
 
 dotenv.config();
 
@@ -210,6 +211,10 @@ const startServer = async () => {
                 message: `You have a new order ${eventData.orderNumber}.`,
                 data: eventData
               });
+              // Send confirmation email to customer
+              if (eventData.customerEmail) {
+                emailService.sendOrderConfirmation(eventData, eventData.customerEmail);
+              }
               break;
 
             case 'order.status_updated':
@@ -220,16 +225,24 @@ const startServer = async () => {
                 message: `Order ${eventData.orderNumber} is now ${eventData.newStatus.replace('_', ' ')}.`,
                 data: eventData
               });
+              // Send status update email
+              if (eventData.customerEmail) {
+                emailService.sendOrderStatusUpdate(eventData, eventData.customerEmail, eventData.newStatus);
+              }
               break;
 
             case 'delivery.status_updated':
               // Notify about delivery updates
-              broadcastNotification({
+              sendNotification(eventData.customerId, {
                 type: 'delivery_update',
                 title: 'Delivery Update',
                 message: `Delivery ${eventData.deliveryNumber} status: ${eventData.newStatus.replace('_', ' ')}.`,
                 data: eventData
               });
+              // Send delivery update email
+              if (eventData.customerEmail) {
+                emailService.sendDeliveryUpdate(eventData, eventData.customerEmail, eventData.newStatus);
+              }
               break;
 
             case 'inspection.scheduled':
@@ -246,6 +259,10 @@ const startServer = async () => {
                 message: `A ${eventData.type} inspection has been scheduled for your facility.`,
                 data: eventData
               });
+              // Send inspection notification email
+              if (eventData.targetEmail) {
+                emailService.sendInspectionNotification(eventData, eventData.targetEmail);
+              }
               break;
 
             case 'compliance.violation':

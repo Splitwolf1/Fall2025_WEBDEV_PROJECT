@@ -284,9 +284,10 @@ services:
     environment:
       - SERVICE_NAME=notification-service
       - PORT=3007
+      - SOCKETIO_PORT=3007
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
-      - SOCKETIO_PORT=3007
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
     depends_on:
       - rabbitmq
       - consul
