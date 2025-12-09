@@ -10,16 +10,30 @@ const router = express.Router();
 const fetchUserDetails = async (userId: string): Promise<{ name: string; email: string } | null> => {
   try {
     const userServiceUrl = process.env.USER_SERVICE_URL || 'http://user-service:3001';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    
     const response = await fetch(`${userServiceUrl}/api/auth/users/${userId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: 3000,
+      signal: controller.signal,
     });
     
+    clearTimeout(timeoutId);
+    
     if (response.ok) {
-      const userData = await response.json();
+      const userData = await response.json() as {
+        success?: boolean;
+        user?: {
+          restaurantDetails?: { businessName?: string };
+          farmDetails?: { farmName?: string };
+          distributorDetails?: { companyName?: string };
+          profile?: { firstName?: string; lastName?: string };
+          email?: string;
+        };
+      };
       if (userData.success && userData.user) {
         const user = userData.user;
         const name = user.restaurantDetails?.businessName 

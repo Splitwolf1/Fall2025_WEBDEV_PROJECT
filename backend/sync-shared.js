@@ -8,20 +8,22 @@
 const fs = require('fs');
 const path = require('path');
 
-const SERVICES = [
-  'order-service',
-  'user-service',
-  'product-service',
-  'health-service',
-  'delivery-service',
-  'notification-service',
-  'chatbot-service'
+const targets = [
+  'gateways/external-api-gateway',
+  'gateways/internal-api-gateway',
+  'api-gateway',
+  'services/user-service',
+  'services/product-service',
+  'services/order-service',
+  'services/delivery-service',
+  'services/health-service',
+  'services/notification-service',
+  'services/chatbot-service'
 ];
 
 const SHARED_DIR = path.join(__dirname, 'shared');
-const SERVICES_DIR = path.join(__dirname, 'services');
 
-console.log('🔄 Syncing shared modules to all services...\n');
+console.log('🔄 Syncing shared modules to all services and gateways...\n');
 
 // Check if shared directory exists
 if (!fs.existsSync(SHARED_DIR)) {
@@ -40,35 +42,35 @@ if (sharedFiles.length === 0) {
 let successCount = 0;
 let errorCount = 0;
 
-// Copy to each service
-SERVICES.forEach(service => {
-  const serviceSharedDir = path.join(SERVICES_DIR, service, 'shared');
+// Copy to each target
+targets.forEach(target => {
+  const targetSharedDir = path.join(__dirname, target, 'shared');
 
   try {
     // Create shared directory if it doesn't exist
-    if (!fs.existsSync(serviceSharedDir)) {
-      fs.mkdirSync(serviceSharedDir, { recursive: true });
+    if (!fs.existsSync(targetSharedDir)) {
+      fs.mkdirSync(targetSharedDir, { recursive: true });
     }
 
     // Copy each shared file
     sharedFiles.forEach(file => {
       const src = path.join(SHARED_DIR, file);
-      const dest = path.join(serviceSharedDir, file);
+      const dest = path.join(targetSharedDir, file);
       fs.copyFileSync(src, dest);
     });
 
-    console.log(`  ✅ ${service}`);
+    console.log(`  ✅ ${target}`);
     successCount++;
   } catch (error) {
-    console.error(`  ❌ ${service}: ${error.message}`);
+    console.error(`  ❌ ${target}: ${error.message}`);
     errorCount++;
   }
 });
 
-console.log(`\n📦 Synced ${sharedFiles.length} file(s) to ${successCount} service(s)`);
+console.log(`\n📦 Synced ${sharedFiles.length} file(s) to ${successCount} target(s)`);
 
 if (errorCount > 0) {
-  console.error(`⚠️  ${errorCount} service(s) failed to sync`);
+  console.error(`⚠️  ${errorCount} target(s) failed to sync`);
   process.exit(1);
 }
 

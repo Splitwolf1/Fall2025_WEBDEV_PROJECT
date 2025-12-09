@@ -76,27 +76,65 @@ services:
     networks:
       - farm2table-network
 
-  # API Gateway
-  api-gateway:
-    build: ./api-gateway
-    container_name: farm2table-api-gateway
+  # ============================================
+  # GATEWAYS (External + Internal)
+  # ============================================
+
+  # External API Gateway (Port 4000) - For client applications
+  external-api-gateway:
+    build: ./gateways/external-api-gateway
+    container_name: farm2table-external-gateway
     ports:
       - "4000:4000"
     environment:
       - NODE_ENV=development
       - PORT=4000
-      - CONSUL_HOST=consul
-      - CONSUL_PORT=8500
       - JWT_SECRET=your-secret-key-change-in-production
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - USER_SERVICE_URL=http://user-service:3002
+      - PRODUCT_SERVICE_URL=http://product-service:3003
+      - ORDER_SERVICE_URL=http://order-service:3004
+      - DELIVERY_SERVICE_URL=http://delivery-service:3005
+      - HEALTH_SERVICE_URL=http://health-service:3006
+      - NOTIFICATION_SERVICE_URL=http://notification-service:3007
+      - CHATBOT_SERVICE_URL=http://chatbot-service:3008
     depends_on:
       - consul
       - rabbitmq
     networks:
       - farm2table-network
     volumes:
-      - ./api-gateway:/app
+      - ./gateways/external-api-gateway:/app
       - ./shared:/app/shared
       - /app/node_modules
+
+  # Internal API Gateway (Port 4001) - For service-to-service communication
+  internal-api-gateway:
+    build: ./gateways/internal-api-gateway
+    container_name: farm2table-internal-gateway
+    ports:
+      - "4001:4001"
+    environment:
+      - NODE_ENV=development
+      - PORT=4001
+      - INTERNAL_API_KEY=internal-service-key-change-in-production
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - USER_SERVICE_URL=http://user-service:3002
+      - PRODUCT_SERVICE_URL=http://product-service:3003
+      - ORDER_SERVICE_URL=http://order-service:3004
+      - DELIVERY_SERVICE_URL=http://delivery-service:3005
+    depends_on:
+      - consul
+      - rabbitmq
+    networks:
+      - farm2table-network
+    volumes:
+      - ./gateways/internal-api-gateway:/app
+      - /app/node_modules
+
+  # ============================================
+  # MICROSERVICES
+  # ============================================
 
   # Microservices
   user-service:
