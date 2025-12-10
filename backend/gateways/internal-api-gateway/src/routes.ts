@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { serviceAuth } from './middleware/serviceAuth';
 
@@ -30,7 +30,7 @@ router.use(
         },
         timeout: 10000,
         proxyTimeout: 10000,
-        onError: (err, req, res: any) => {
+        onError: (err: Error, req: Request, res: Response) => {
             console.error('Internal proxy error (user):', err);
             res.status(502).json({
                 error: 'Service Unavailable',
@@ -52,7 +52,7 @@ router.use(
         },
         timeout: 10000,
         proxyTimeout: 10000,
-        onError: (err, req, res: any) => {
+        onError: (err: Error, req: Request, res: Response) => {
             console.error('Internal proxy error (product):', err);
             res.status(502).json({
                 error: 'Service Unavailable',
@@ -74,7 +74,7 @@ router.use(
         },
         timeout: 10000,
         proxyTimeout: 10000,
-        onError: (err, req, res: any) => {
+        onError: (err: Error, req: Request, res: Response) => {
             console.error('Internal proxy error (order):', err);
             res.status(502).json({
                 error: 'Service Unavailable',
@@ -96,7 +96,7 @@ router.use(
         },
         timeout: 10000,
         proxyTimeout: 10000,
-        onError: (err, req, res: any) => {
+        onError: (err: Error, req: Request, res: Response) => {
             console.error('Internal proxy error (delivery):', err);
             res.status(502).json({
                 error: 'Service Unavailable',
