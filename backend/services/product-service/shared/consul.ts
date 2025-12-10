@@ -6,6 +6,13 @@ export interface ServiceRegistration {
   host?: string;
 }
 
+interface HealthService {
+  Service: {
+    Address: string;
+    Port: number;
+  };
+}
+
 export const registerService = async (
   serviceName: string,
   port: number,
@@ -13,7 +20,7 @@ export const registerService = async (
   consulPort: number = 8500
 ): Promise<void> => {
   try {
-    const consul = new Consul({ host: consulHost, port: consulPort });
+    const consul = new Consul({ host: consulHost, port: consulPort.toString() });
 
     const registration = {
       name: serviceName,
@@ -49,8 +56,8 @@ export const discoverService = async (
   consulPort: number = 8500
 ): Promise<{ host: string; port: number } | null> => {
   try {
-    const consul = new Consul({ host: consulHost, port: consulPort });
-    const services = await consul.health.service({ service: serviceName, passing: true });
+    const consul = new Consul({ host: consulHost, port: consulPort.toString() });
+    const services: HealthService[] = (await consul.health.service({ service: serviceName, passing: true })) as HealthService[];
 
     if (services.length === 0) {
       console.warn(`⚠️ No healthy instances of ${serviceName} found`);

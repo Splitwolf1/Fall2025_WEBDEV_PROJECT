@@ -101,7 +101,7 @@ router.post('/', async (req: Request, res: Response) => {
         inspectorId: inspection.inspectorId,
         targetType: inspection.targetType,
         targetId: inspection.targetId,
-        type: inspection.type,
+        type: inspection.inspectionType,
         scheduledDate: inspection.scheduledDate,
         timestamp: new Date().toISOString()
       });
@@ -179,11 +179,11 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
         inspectorId: inspection.inspectorId,
         targetType: inspection.targetType,
         targetId: inspection.targetId,
-        type: inspection.type,
+        type: inspection.inspectionType,
         result: inspection.result,
-        score: inspection.score,
+        score: inspection.overallScore,
         violationsCount: inspection.violations?.length || 0,
-        completedAt: inspection.completedAt,
+        completedAt: inspection.completedDate,
         timestamp: new Date().toISOString()
       });
       
@@ -194,7 +194,7 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
           targetType: inspection.targetType,
           targetId: inspection.targetId,
           violations: inspection.violations,
-          score: inspection.score,
+          score: inspection.overallScore,
           severity: 'critical', // Failed inspection is critical
           timestamp: new Date().toISOString()
         });

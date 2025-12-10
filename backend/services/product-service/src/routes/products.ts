@@ -14,7 +14,7 @@ const fetchUserData = async (userId: string) => {
     });
     
     if (response.ok) {
-      const userData = await response.json();
+      const userData = (await response.json()) as { user?: any };
       return userData.user;
     }
     return null;
@@ -31,7 +31,7 @@ const populateProductsWithFarmerInfo = async (products: any[]) => {
   const farmersData = await Promise.all(farmerDataPromises);
   
   const farmersMap = new Map();
-  farmersData.forEach((farmer, index) => {
+  farmersData.forEach((farmer: any, index: number) => {
     if (farmer) {
       farmersMap.set(farmerIds[index], farmer);
     }
