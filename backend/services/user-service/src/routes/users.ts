@@ -5,6 +5,44 @@ import { getRabbitMQClient } from '../../shared/rabbitmq';
 
 const router = express.Router();
 
+// IMPORTANT: Specific routes MUST come before dynamic routes with parameters
+// Get current user/me - MUST be before /:id route  
+router.get('/me', authenticateToken, async (req: Request, res: Response) => {
+    try {
+        const user = await User.findById((req as any).user.userId);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found',
+            });
+        }
+
+        res.json({
+            success: true,
+            user: {
+                id: user._id,
+                email: user.email,
+                role: user.role,
+                profile: user.profile,
+                farmDetails: user.farmDetails,
+                restaurantDetails: user.restaurantDetails,
+                distributorDetails: user.distributorDetails,
+                inspectorDetails: user.inspectorDetails,
+                emailVerified: user.emailVerified,
+                createdAt: user.createdAt,
+            },
+        });
+    } catch (error: any) {
+        console.error('Get user error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: error.message,
+        });
+    }
+});
+
 // Get user by ID (for service-to-service calls)
 router.get('/:id', async (req: Request, res: Response) => {
     try {
@@ -34,43 +72,6 @@ router.get('/:id', async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error('Get user by ID error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error',
-            error: error.message,
-        });
-    }
-});
-
-// Get current user/me
-router.get('/me', authenticateToken, async (req: Request, res: Response) => {
-    try {
-        const user = await User.findById((req as any).user.userId);
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: 'User not found',
-            });
-        }
-
-        res.json({
-            success: true,
-            user: {
-                id: user._id,
-                email: user.email,
-                role: user.role,
-                profile: user.profile,
-                farmDetails: user.farmDetails,
-                restaurantDetails: user.restaurantDetails,
-                distributorDetails: user.distributorDetails,
-                inspectorDetails: user.inspectorDetails,
-                emailVerified: user.emailVerified,
-                createdAt: user.createdAt,
-            },
-        });
-    } catch (error: any) {
-        console.error('Get user error:', error);
         res.status(500).json({
             success: false,
             message: 'Server error',
