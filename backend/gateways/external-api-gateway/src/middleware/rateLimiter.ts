@@ -2,11 +2,11 @@ import rateLimit from 'express-rate-limit';
 
 /**
  * General API rate limiter
- * 100 requests per 15 minutes per IP
+ * 500 requests per 15 minutes per IP (increased for development)
  */
 export const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Max 100 requests per windowMs
+    max: 500, // Max 500 requests per windowMs (was 100)
     message: 'Too many requests from this IP, please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
@@ -14,11 +14,11 @@ export const apiLimiter = rateLimit({
 
 /**
  * Stricter rate limiter for authentication endpoints
- * 5 login attempts per 15 minutes per IP
+ * 20 login attempts per 15 minutes per IP (increased for development)
  */
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // Max 5 requests per windowMs
+    max: 20, // Max 20 requests per windowMs (was 5)
     message: 'Too many authentication attempts, please try again later.',
     standardHeaders: true,
     legacyHeaders: false,

@@ -97,7 +97,22 @@ class ApiClient {
 
       if (!response.ok) {
         // Provide more detailed error messages
-        const errorMessage = data.message || data.error || `HTTP error! status: ${response.status}`;
+        const errorMessage = data?.message || response.statusText || 'An error occurred';
+
+        // Handle authentication errors automatically
+        if (response.status === 401 || response.status === 403) {
+          // Token is invalid or expired
+          console.warn('🔑 Token expired or invalid - clearing auth data');
+
+          // Clear all auth data
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+          }
+
+          throw new Error('Session expired. Please log in again.');
+        }
+
         if (response.status === 404) {
           throw new Error(`Endpoint not found: ${endpoint}. Please check if the backend service is running.`);
         }
