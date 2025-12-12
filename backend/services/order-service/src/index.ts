@@ -49,8 +49,14 @@ connectDB(MONGO_URI).then(() => {
   console.log('✅ Order Service - MongoDB connected');
 
   // Start server
-  app.listen(PORT, () => {
+  app.listen(PORT, async () => {
     console.log(`📋 Order Service running on port ${PORT}`);
+    try {
+      const { registerService } = await import('../shared/consul');
+      await registerService('order-service', Number(PORT), process.env.CONSUL_HOST || 'consul', 8500);
+    } catch (error) {
+      console.error('❌ Consul registration failed (non-critical):', error);
+    }
   });
 });
 

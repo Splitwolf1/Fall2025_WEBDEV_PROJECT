@@ -167,10 +167,18 @@ app.post('/notify/role/:role', (req, res) => {
 // Start server
 const startServer = async () => {
   try {
-    httpServer.listen(PORT, () => {
+    httpServer.listen(PORT, async () => {
       console.log(`🚀 Notification Service running on port ${PORT}`);
       console.log(`📍 Health check: http://localhost:${PORT}/health`);
       console.log(`🔌 Socket.io ready for connections`);
+
+      // Register with Consul
+      try {
+        const { registerService } = await import('../shared/consul');
+        await registerService('notification-service', Number(PORT), process.env.CONSUL_HOST || 'consul', 8500);
+      } catch (error) {
+        console.error('❌ Consul registration failed (non-critical):', error);
+      }
     });
 
     // Connect to RabbitMQ and listen for events

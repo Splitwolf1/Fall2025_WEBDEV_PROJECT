@@ -48,8 +48,14 @@ app.get('/', (req, res) => {
 connectDB(MONGO_URI).then(() => {
   console.log('✅ Delivery Service - MongoDB connected');
 
-  app.listen(PORT, () => {
+  app.listen(PORT, async () => {
     console.log(`🚚 Delivery Service running on port ${PORT}`);
+    try {
+      const { registerService } = await import('../shared/consul');
+      await registerService('delivery-service', Number(PORT), process.env.CONSUL_HOST || 'consul', 8500);
+    } catch (error) {
+      console.error('❌ Consul registration failed (non-critical):', error);
+    }
   });
 });
 

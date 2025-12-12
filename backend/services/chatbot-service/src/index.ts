@@ -138,9 +138,17 @@ const setupEventHandlers = async (rabbitMQ: RabbitMQClient) => {
 // Start server
 const startServer = async () => {
   try {
-    app.listen(PORT, () => {
+    app.listen(PORT, async () => {
       console.log(`🚀 Chatbot Service running on port ${PORT}`);
       console.log(`📍 Health check: http://localhost:${PORT}/health`);
+
+      // Register with Consul
+      try {
+        const { registerService } = await import('../shared/consul');
+        await registerService('chatbot-service', Number(PORT), process.env.CONSUL_HOST || 'consul', 8500);
+      } catch (error) {
+        console.error('❌ Consul registration failed (non-critical):', error);
+      }
     });
 
     // Connect to RabbitMQ
@@ -151,8 +159,6 @@ const startServer = async () => {
     } catch (error) {
       console.error('❌ RabbitMQ connection error:', error);
     }
-
-    // TODO: Register with Consul
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
