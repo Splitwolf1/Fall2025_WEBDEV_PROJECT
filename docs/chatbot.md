@@ -453,3 +453,17 @@ Delivery Service ← subscribes ← "order.created"
 │   Delivery Status: In Transit 🚚                                         │
 │   Expected Delivery: Monday, Dec 16, 2:00 PM"                           │
 └─────────────────────────────────────────────────────────────────────────┘
+
+
+
+
+
+
+
+
+
+/backend/services/chatbot-service/src/
+├── index.ts      → Entry point, API endpoint
+├── intents.ts    → Understands WHAT user is asking
+├── handlers.ts   → Generates the response
+└── services.ts   → Talks to other services for data
