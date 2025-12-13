@@ -17,12 +17,12 @@ const retryRequest = async <T>(
       if (i === maxRetries) {
         throw error;
       }
-      
+
       // Only retry on network errors, not on 4xx client errors
       if (error.response && error.response.status >= 400 && error.response.status < 500) {
         throw error;
       }
-      
+
       await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
     }
   }
@@ -30,10 +30,10 @@ const retryRequest = async <T>(
 };
 
 // Service endpoints
-const ORDER_SERVICE_URL = process.env.ORDER_SERVICE_URL || 'http://localhost:3003';
-const DELIVERY_SERVICE_URL = process.env.DELIVERY_SERVICE_URL || 'http://localhost:3004';
-const PRODUCT_SERVICE_URL = process.env.PRODUCT_SERVICE_URL || 'http://localhost:3005';
-const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3002';
+const ORDER_SERVICE_URL = process.env.ORDER_SERVICE_URL || 'http://order-service:3004';
+const DELIVERY_SERVICE_URL = process.env.DELIVERY_SERVICE_URL || 'http://delivery-service:3005';
+const PRODUCT_SERVICE_URL = process.env.PRODUCT_SERVICE_URL || 'http://product-service:3003';
+const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://user-service:3002';
 
 export interface Order {
   id: string;
@@ -83,6 +83,22 @@ export const getOrderByNumber = async (orderNumber: string): Promise<Order | nul
   }
 };
 
+export const getOrderById = async (orderId: string): Promise<Order | null> => {
+  try {
+    const response = await axios.get(`${ORDER_SERVICE_URL}/api/orders/${orderId}`);
+    if (response.data.success && response.data.order) {
+      return response.data.order;
+    }
+    return null;
+  } catch (error: any) {
+    if (error.response?.status === 404) {
+      return null;
+    }
+    console.error('Error fetching order by ID:', error.message);
+    return null;
+  }
+};
+
 export const getUserOrders = async (userId: string): Promise<Order[]> => {
   try {
     const response = await axios.get(`${ORDER_SERVICE_URL}/api/orders/user/${userId}`);
@@ -126,7 +142,7 @@ export const searchProducts = async (query: string, category?: string): Promise<
     if (category) {
       params.category = category;
     }
-    
+
     const response = await axios.get(`${PRODUCT_SERVICE_URL}/api/products`, { params });
     return response.data.data || [];
   } catch (error: any) {
@@ -167,7 +183,7 @@ export const formatOrderStatus = (status: string): string => {
     'delivered': 'Delivered',
     'cancelled': 'Cancelled'
   };
-  
+
   return statusMap[status] || status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
 
@@ -181,6 +197,6 @@ export const formatDeliveryStatus = (status: string): string => {
     'delivered': 'Delivered',
     'failed': 'Delivery Failed'
   };
-  
+
   return statusMap[status] || status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
 };

@@ -738,9 +738,47 @@ rabbitmq Container
 
 ---
 
+
+---
+
+## 🔐 Security & Authentication
+
+### Q19: How did the security architecture change from the old version?
+
+**Old Architecture (Monolithic):**
+- **Single Entry Point:** One API server handled everything.
+- **Implicit Trust:** Functions called each other directly in memory. No internal security checks.
+- **Single Secret:** One `JWT_SECRET` used everywhere.
+
+**New Architecture (Microservices):**
+- **Dual Gateways:**
+    - **External Gateway (Port 4000):** Public facing, checks tokens for clients.
+    - **Internal Gateway (Port 4001):** Private, handles service-to-service calls.
+- **Defense in Depth (**Zero Trust**):**
+    - Just because the Gateway accepts a request, the Service **DOES NOT** blindly trust it.
+    - Each service (User, Product, etc.) verifies the JWT token **independently**.
+- **Isolation:** If one service is compromised, others remain secure because they require valid tokens for every request.
+
+---
+
+### Q20: Why did we face "Invalid or Expired Token" errors (The 403 Bug)?
+
+**The Problem:**
+1. **Frontend** logged in → **Auth Service** signed token with Secret A (`farm2table_secure...`).
+2. **Gateway** verified token with Secret A ✅ → Forwarded request.
+3. **User Service** received request but tried to verify with **Secret B** (default `your-secret-key...`).
+4. **Result:** User Service rejected the legitimate token as "Invalid" (403 Forbidden).
+
+**The Solution:**
+We updated `docker-compose.yml` to inject the `JWT_SECRET` environment variable into **ALL 7 Microservices** (User, Product, Order, etc.), not just the Gateways. This ensures every service uses the same key to verify tokens.
+
+**Key Takeaway:** In distributed systems, shared secrets must be consistent across all verifying parties! A mismatch in any service causes that specific service to reject the token.
+
+---
+
 ## 🎯 Common Interview Questions
 
-### Q19: Walk me through what happens when a user creates an order.
+### Q21: Walk me through what happens when a user creates an order.
 
 **Step-by-Step:**
 
@@ -788,7 +826,7 @@ rabbitmq Container
 
 ---
 
-### Q20: How does the app stay available if one service crashes?
+### Q22: How does the app stay available if one service crashes?
 
 **Answer:** Fault isolation + Message queuing
 
@@ -826,7 +864,7 @@ healthcheck:
 
 ---
 
-### Q21: Why do we have 5 separate MongoDB databases?
+### Q23: Why do we have 5 separate MongoDB databases?
 
 **Answer:** Database per service pattern (microservices best practice)
 
@@ -851,7 +889,7 @@ Health Service     → mongo-health (Port 27021)
 
 ---
 
-### Q22: How do you deploy this in production?
+### Q24: How do you deploy this in production?
 
 **Development (Current):**
 ```bash

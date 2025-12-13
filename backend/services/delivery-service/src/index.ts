@@ -59,10 +59,73 @@ connectDB(MONGO_URI).then(() => {
   });
 });
 
-// Connect to RabbitMQ
+
+
+// Connect to RabbitMQ and listen for events
 getRabbitMQClient()
-  .then(() => {
+  .then(async (rabbitmq) => {
     console.log('✅ Delivery Service - RabbitMQ connected');
+
+    // Subscribe to events
+    await rabbitmq.subscribe(
+      'delivery-service-events',
+      'farm2table.events',
+      '*', // Listen to all events
+      async (eventData) => {
+        console.log('📨 Delivery Service received event:', eventData.type || 'unknown');
+
+        try {
+          // Dynamic import to avoid circular dependencies or initialization issues
+          const { default: Delivery, DeliveryStatus } = await import('./models/Delivery');
+
+          switch (eventData.type || Object.keys(eventData)[0]) {
+            case 'order.status_updated':
+              // If order is ready for pickup, ensure delivery status is updated
+              if (eventData.newStatus === 'ready_for_pickup') {
+                console.log(`📦 Order ${eventData.orderNumber} is ready for pickup. Updating delivery...`);
+
+                const delivery = await Delivery.findOne({ orderId: eventData.orderId });
+
+                if (delivery) {
+                  if (delivery.status === DeliveryStatus.SCHEDULED) {
+                    delivery.status = DeliveryStatus.PICKUP_PENDING;
+                    delivery.timeline.push({
+                      status: DeliveryStatus.PICKUP_PENDING,
+                      timestamp: new Date(),
+                      note: 'Order is ready for pickup (Event Triggered)',
+                    });
+                    await delivery.save();
+                    console.log(`✅ Delivery ${delivery.orderNumber} updated to PICKUP_PENDING via event`);
+
+                    // Publish update event back
+                    await rabbitmq.publish('farm2table.events', 'delivery.status_updated', {
+                      deliveryId: delivery._id,
+                      deliveryNumber: delivery.orderNumber,
+                      orderId: delivery.orderId,
+                      distributorId: delivery.distributorId,
+                      newStatus: DeliveryStatus.PICKUP_PENDING,
+                      timestamp: new Date().toISOString()
+                    });
+                  } else {
+                    console.log(`ℹ️ Delivery ${delivery.orderNumber} already in status: ${delivery.status}`);
+                  }
+                } else {
+                  console.warn(`⚠️ No delivery found for ready order ${eventData.orderNumber}`);
+                  // Optionally create delivery here if missing
+                }
+              }
+              break;
+
+            default:
+              // Ignore other events
+              break;
+          }
+        } catch (error) {
+          console.error('❌ Error processing event:', error);
+        }
+      }
+    );
+    console.log('🎧 Delivery Service listening for events');
   })
   .catch((error) => {
     console.error('❌ Delivery Service - RabbitMQ connection failed:', error);

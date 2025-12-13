@@ -224,6 +224,12 @@ export const auth = {
     return !!localStorage.getItem('auth-token');
   },
 
+  // Get the authentication token
+  getToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('auth-token');
+  },
+
   // Update user profile
   async updateProfile(updates: any): Promise<User | null> {
     try {

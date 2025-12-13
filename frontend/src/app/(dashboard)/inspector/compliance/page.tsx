@@ -1,11 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   CheckCircle,
@@ -14,142 +20,171 @@ import {
   TrendingUp,
   TrendingDown,
   Building,
-  Award,
-  Target,
-  BarChart3
+  Search,
+  Loader2,
+  Eye,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
+import { auth } from '@/lib/auth';
+import axios from 'axios';
 
-// Mock compliance data
-const facilityCompliance = [
-  {
-    id: 'FAC-001',
-    name: 'Green Valley Farm',
-    type: 'Farm',
-    overallScore: 96,
-    lastInspection: '2025-10-28',
-    status: 'excellent',
-    categories: {
-      temperature: 98,
-      cleanliness: 95,
-      documentation: 94,
-      storage: 97,
-    },
-    inspections: 12,
-    violations: 1,
-    trend: 'up',
-  },
-  {
-    id: 'FAC-002',
-    name: 'Sunny Acres',
-    type: 'Farm',
-    overallScore: 88,
-    lastInspection: '2025-11-01',
-    status: 'good',
-    categories: {
-      temperature: 85,
-      cleanliness: 90,
-      documentation: 88,
-      storage: 89,
-    },
-    inspections: 10,
-    violations: 3,
-    trend: 'stable',
-  },
-  {
-    id: 'FAC-003',
-    name: 'Fresh Distribution Center',
-    type: 'Distributor',
-    overallScore: 92,
-    lastInspection: '2025-10-25',
-    status: 'excellent',
-    categories: {
-      temperature: 94,
-      cleanliness: 91,
-      documentation: 90,
-      storage: 93,
-    },
-    inspections: 15,
-    violations: 2,
-    trend: 'up',
-  },
-  {
-    id: 'FAC-004',
-    name: 'Fresh Bistro',
-    type: 'Restaurant',
-    overallScore: 82,
-    lastInspection: '2025-10-30',
-    status: 'satisfactory',
-    categories: {
-      temperature: 78,
-      cleanliness: 85,
-      documentation: 82,
-      storage: 83,
-    },
-    inspections: 8,
-    violations: 5,
-    trend: 'down',
-  },
-  {
-    id: 'FAC-005',
-    name: 'Harvest Hill Farm',
-    type: 'Farm',
-    overallScore: 75,
-    lastInspection: '2025-11-02',
-    status: 'needs_improvement',
-    categories: {
-      temperature: 72,
-      cleanliness: 76,
-      documentation: 78,
-      storage: 74,
-    },
-    inspections: 9,
-    violations: 8,
-    trend: 'down',
-  },
-];
+interface Inspection {
+  _id: string;
+  targetId: string;
+  targetName: string;
+  targetType: string;
+  scheduledDate: string;
+  completedDate?: string;
+  result: 'pass' | 'pass_with_warnings' | 'fail' | 'pending';
+  overallScore?: number;
+  violations?: any[];
+}
 
-const complianceStandards = [
-  {
-    category: 'Temperature Control',
-    requirement: 'Maintain proper cold chain temperatures',
-    threshold: 85,
-    avgScore: 88,
-    passingFacilities: 42,
-    totalFacilities: 50,
-  },
-  {
-    category: 'Cleanliness & Sanitation',
-    requirement: 'Regular cleaning and sanitization protocols',
-    threshold: 85,
-    avgScore: 91,
-    passingFacilities: 47,
-    totalFacilities: 50,
-  },
-  {
-    category: 'Documentation',
-    requirement: 'Complete and up-to-date records',
-    threshold: 85,
-    avgScore: 86,
-    passingFacilities: 43,
-    totalFacilities: 50,
-  },
-  {
-    category: 'Storage Conditions',
-    requirement: 'Proper storage and separation',
-    threshold: 85,
-    avgScore: 89,
-    passingFacilities: 45,
-    totalFacilities: 50,
-  },
-];
+interface FacilityCompliance {
+  id: string;
+  name: string;
+  type: string;
+  inspectionCount: number;
+  passCount: number;
+  failCount: number;
+  violationCount: number;
+  averageScore: number;
+  lastInspection?: string;
+  status: 'excellent' | 'good' | 'satisfactory' | 'needs_improvement' | 'critical';
+  trend: 'up' | 'down' | 'stable';
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export default function InspectorCompliancePage() {
-  const [timeRange, setTimeRange] = useState('30d');
-  const [facilityType, setFacilityType] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedTab, setSelectedTab] = useState('facilities');
+  const [facilityCompliance, setFacilityCompliance] = useState<FacilityCompliance[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedFacility, setSelectedFacility] = useState<FacilityCompliance | null>(null);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
 
-  const filteredFacilities = facilityCompliance.filter(
-    f => facilityType === 'all' || f.type.toLowerCase() === facilityType
-  );
+  // Fetch inspections and calculate compliance
+  useEffect(() => {
+    const fetchCompliance = async () => {
+      try {
+        const token = auth.getToken();
+        const response = await axios.get(`${API_BASE}/api/inspections`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (response.data.success) {
+          const inspections: Inspection[] = response.data.inspections || [];
+
+          // Group inspections by facility
+          const facilityMap = new Map<string, {
+            name: string;
+            type: string;
+            inspections: Inspection[];
+          }>();
+
+          inspections.forEach(inspection => {
+            const key = inspection.targetId;
+            if (!facilityMap.has(key)) {
+              facilityMap.set(key, {
+                name: inspection.targetName,
+                type: inspection.targetType,
+                inspections: [],
+              });
+            }
+            facilityMap.get(key)!.inspections.push(inspection);
+          });
+
+          // Calculate compliance for each facility
+          const complianceData: FacilityCompliance[] = [];
+
+          facilityMap.forEach((data, id) => {
+            const completedInspections = data.inspections.filter(i => i.result !== 'pending');
+            const passCount = completedInspections.filter(i => i.result === 'pass' || i.result === 'pass_with_warnings').length;
+            const failCount = completedInspections.filter(i => i.result === 'fail').length;
+            const violationCount = data.inspections.reduce((acc, i) => acc + (i.violations?.length || 0), 0);
+
+            const scores = completedInspections
+              .filter(i => i.overallScore !== undefined)
+              .map(i => i.overallScore!);
+            const averageScore = scores.length > 0
+              ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+              : 0;
+
+            const lastInspection = data.inspections
+              .filter(i => i.completedDate)
+              .sort((a, b) => new Date(b.completedDate!).getTime() - new Date(a.completedDate!).getTime())[0];
+
+            // Determine status based on average score
+            let status: FacilityCompliance['status'] = 'needs_improvement';
+            if (averageScore >= 90) status = 'excellent';
+            else if (averageScore >= 80) status = 'good';
+            else if (averageScore >= 70) status = 'satisfactory';
+            else if (averageScore >= 50) status = 'needs_improvement';
+            else if (completedInspections.length > 0) status = 'critical';
+
+            // Calculate trend (compare last 2 inspections)
+            const recentInspections = completedInspections
+              .filter(i => i.overallScore !== undefined)
+              .sort((a, b) => new Date(b.completedDate || b.scheduledDate).getTime() - new Date(a.completedDate || a.scheduledDate).getTime())
+              .slice(0, 2);
+
+            let trend: FacilityCompliance['trend'] = 'stable';
+            if (recentInspections.length >= 2) {
+              const [latest, previous] = recentInspections;
+              if (latest.overallScore! > previous.overallScore!) trend = 'up';
+              else if (latest.overallScore! < previous.overallScore!) trend = 'down';
+            }
+
+            complianceData.push({
+              id,
+              name: data.name,
+              type: data.type,
+              inspectionCount: data.inspections.length,
+              passCount,
+              failCount,
+              violationCount,
+              averageScore,
+              lastInspection: lastInspection?.completedDate,
+              status,
+              trend,
+            });
+          });
+
+          setFacilityCompliance(complianceData.sort((a, b) => b.averageScore - a.averageScore));
+        }
+      } catch (error) {
+        console.error('Failed to fetch compliance data:', error);
+        toast.error('Failed to load compliance data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCompliance();
+  }, []);
+
+  // Filter facilities
+  const filteredFacilities = facilityCompliance.filter(facility => {
+    const matchesSearch = facility.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = selectedStatus === 'all' || facility.status === selectedStatus;
+    return matchesSearch && matchesStatus;
+  });
+
+  // Stats
+  const excellentCount = facilityCompliance.filter(f => f.status === 'excellent').length;
+  const needsImprovementCount = facilityCompliance.filter(f => f.status === 'needs_improvement' || f.status === 'critical').length;
+  const overallAverage = facilityCompliance.length > 0
+    ? Math.round(facilityCompliance.reduce((acc, f) => acc + f.averageScore, 0) / facilityCompliance.length)
+    : 0;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -160,7 +195,9 @@ export default function InspectorCompliancePage() {
       case 'satisfactory':
         return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Satisfactory</Badge>;
       case 'needs_improvement':
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Needs Improvement</Badge>;
+        return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">Needs Improvement</Badge>;
+      case 'critical':
+        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Critical</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -170,6 +207,7 @@ export default function InspectorCompliancePage() {
     if (score >= 90) return 'text-green-600';
     if (score >= 80) return 'text-blue-600';
     if (score >= 70) return 'text-yellow-600';
+    if (score >= 50) return 'text-orange-600';
     return 'text-red-600';
   };
 
@@ -177,136 +215,111 @@ export default function InspectorCompliancePage() {
     if (score >= 90) return 'bg-green-500';
     if (score >= 80) return 'bg-blue-500';
     if (score >= 70) return 'bg-yellow-500';
+    if (score >= 50) return 'bg-orange-500';
     return 'bg-red-500';
   };
+
+  const getTrendIcon = (trend: string) => {
+    switch (trend) {
+      case 'up':
+        return <TrendingUp className="h-4 w-4 text-green-500" />;
+      case 'down':
+        return <TrendingDown className="h-4 w-4 text-red-500" />;
+      default:
+        return null;
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Compliance Dashboard</h1>
-          <p className="text-gray-600 mt-1">Monitor facility compliance and standards</p>
-        </div>
-        <div className="flex gap-2">
-          <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="30d">Last 30 days</SelectItem>
-              <SelectItem value="90d">Last 90 days</SelectItem>
-              <SelectItem value="6m">Last 6 months</SelectItem>
-              <SelectItem value="1y">Last year</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={facilityType} onValueChange={setFacilityType}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Facilities</SelectItem>
-              <SelectItem value="farm">Farms</SelectItem>
-              <SelectItem value="distributor">Distributors</SelectItem>
-              <SelectItem value="restaurant">Restaurants</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Compliance Overview</h1>
+        <p className="text-gray-600 mt-1">Monitor facility compliance scores and trends</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Overall Pass Rate</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-600">Total Facilities</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">93%</div>
-            <div className="flex items-center gap-1 mt-1">
-              <TrendingUp className="h-4 w-4 text-green-600" />
-              <span className="text-sm font-medium text-green-600">+3%</span>
-              <span className="text-xs text-gray-500">vs last period</span>
-            </div>
+            <div className="text-2xl font-bold text-gray-900">{facilityCompliance.length}</div>
+            <p className="text-xs text-gray-500 mt-1">Monitored</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Excellent Rated</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-600">Average Score</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">32</div>
+            <div className={`text-2xl font-bold ${getScoreColor(overallAverage)}`}>{overallAverage}%</div>
+            <p className="text-xs text-gray-500 mt-1">Across all facilities</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">Excellent Rating</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{excellentCount}</div>
             <p className="text-xs text-gray-500 mt-1">Score ≥ 90%</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Needs Improvement</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-600">Needs Attention</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">3</div>
-            <div className="flex items-center gap-1 mt-1">
-              <TrendingDown className="h-4 w-4 text-green-600" />
-              <span className="text-sm font-medium text-green-600">-2</span>
-              <span className="text-xs text-gray-500">from last month</span>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Avg Compliance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-900">88.6%</div>
-            <p className="text-xs text-gray-500 mt-1">All facilities</p>
+            <div className="text-2xl font-bold text-orange-600">{needsImprovementCount}</div>
+            <p className="text-xs text-gray-500 mt-1">Score &lt; 70%</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Compliance Standards */}
+      {/* Filters */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5" />
-            Compliance Standards Overview
-          </CardTitle>
-          <CardDescription>Performance across key compliance categories</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            {complianceStandards.map((standard, idx) => (
-              <div key={idx} className="space-y-2">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <h4 className="font-medium text-gray-900">{standard.category}</h4>
-                    <p className="text-sm text-gray-500">{standard.requirement}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className={`text-lg font-bold ${getScoreColor(standard.avgScore)}`}>
-                      {standard.avgScore}%
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {standard.passingFacilities}/{standard.totalFacilities} passing
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden relative">
-                    <div
-                      className={`${getScoreBarColor(standard.avgScore)} h-full rounded-full`}
-                      style={{ width: `${standard.avgScore}%` }}
-                    />
-                    <div
-                      className="absolute top-0 h-full w-0.5 bg-gray-400"
-                      style={{ left: `${standard.threshold}%` }}
-                      title={`Threshold: ${standard.threshold}%`}
-                    />
-                  </div>
-                  <span className="text-xs text-gray-500 w-16">
-                    Min: {standard.threshold}%
-                  </span>
-                </div>
-              </div>
-            ))}
+        <CardContent className="pt-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search facilities..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="excellent">Excellent</SelectItem>
+                <SelectItem value="good">Good</SelectItem>
+                <SelectItem value="satisfactory">Satisfactory</SelectItem>
+                <SelectItem value="needs_improvement">Needs Improvement</SelectItem>
+                <SelectItem value="critical">Critical</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -314,126 +327,131 @@ export default function InspectorCompliancePage() {
       {/* Facility Compliance List */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building className="h-5 w-5" />
-            Facility Compliance Scores
-          </CardTitle>
-          <CardDescription>Individual facility performance</CardDescription>
+          <CardTitle>Facility Compliance ({filteredFacilities.length})</CardTitle>
+          <CardDescription>Compliance scores based on inspection results</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {filteredFacilities.map((facility) => (
-              <Card key={facility.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-4">
-                  <div className="space-y-4">
-                    {/* Header */}
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                          <h3 className="font-semibold text-lg">{facility.name}</h3>
-                          {getStatusBadge(facility.status)}
-                          {facility.trend === 'up' && (
-                            <TrendingUp className="h-4 w-4 text-green-600" />
-                          )}
-                          {facility.trend === 'down' && (
-                            <TrendingDown className="h-4 w-4 text-red-600" />
-                          )}
+          {filteredFacilities.length === 0 ? (
+            <div className="text-center py-12">
+              <Building className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+              <h3 className="text-lg font-medium text-gray-900">No facilities found</h3>
+              <p className="text-gray-500 mt-1">No facilities match your current filters or no inspections have been conducted yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredFacilities.map((facility) => (
+                <Card key={facility.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4 flex-1">
+                        <div className={`text-3xl font-bold ${getScoreColor(facility.averageScore)}`}>
+                          {facility.averageScore}%
                         </div>
-                        <p className="text-sm text-gray-500 mt-1">
-                          {facility.type} • Last inspected: {facility.lastInspection}
-                        </p>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-semibold text-gray-900">{facility.name}</h4>
+                            {getStatusBadge(facility.status)}
+                            {getTrendIcon(facility.trend)}
+                          </div>
+                          <p className="text-sm text-gray-500">{facility.type}</p>
+                          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                            <span>{facility.inspectionCount} inspections</span>
+                            <span className="text-green-600">{facility.passCount} passed</span>
+                            {facility.failCount > 0 && (
+                              <span className="text-red-600">{facility.failCount} failed</span>
+                            )}
+                            {facility.violationCount > 0 && (
+                              <span className="text-orange-600">{facility.violationCount} violations</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <div className={`text-3xl font-bold ${getScoreColor(facility.overallScore)}`}>
-                          {facility.overallScore}
+                      <div className="flex items-center gap-4">
+                        <div className="w-32">
+                          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full ${getScoreBarColor(facility.averageScore)}`}
+                              style={{ width: `${facility.averageScore}%` }}
+                            />
+                          </div>
                         </div>
-                        <p className="text-xs text-gray-500">Overall Score</p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedFacility(facility);
+                            setShowDetailDialog(true);
+                          }}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-                    {/* Category Scores */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Temperature</p>
-                        <div className="flex items-center gap-2">
-                          <Progress value={facility.categories.temperature} className="h-2" />
-                          <span className="text-sm font-semibold">{facility.categories.temperature}%</span>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Cleanliness</p>
-                        <div className="flex items-center gap-2">
-                          <Progress value={facility.categories.cleanliness} className="h-2" />
-                          <span className="text-sm font-semibold">{facility.categories.cleanliness}%</span>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Documentation</p>
-                        <div className="flex items-center gap-2">
-                          <Progress value={facility.categories.documentation} className="h-2" />
-                          <span className="text-sm font-semibold">{facility.categories.documentation}%</span>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Storage</p>
-                        <div className="flex items-center gap-2">
-                          <Progress value={facility.categories.storage} className="h-2" />
-                          <span className="text-sm font-semibold">{facility.categories.storage}%</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Stats */}
-                    <div className="flex items-center justify-between pt-3 border-t">
-                      <div className="flex gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-500">Inspections:</span>
-                          <span className="ml-1 font-semibold">{facility.inspections}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Violations:</span>
-                          <span className="ml-1 font-semibold text-orange-600">{facility.violations}</span>
-                        </div>
-                      </div>
-                      <Button variant="outline" size="sm">
-                        View Details
-                      </Button>
-                    </div>
+      {/* Detail Dialog */}
+      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Facility Compliance Details</DialogTitle>
+          </DialogHeader>
+          {selectedFacility && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className={`text-4xl font-bold ${getScoreColor(selectedFacility.averageScore)}`}>
+                  {selectedFacility.averageScore}%
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">{selectedFacility.name}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    {getStatusBadge(selectedFacility.status)}
+                    {getTrendIcon(selectedFacility.trend)}
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+                </div>
+              </div>
 
-      {/* Insights */}
-      <Card className="border-blue-200 bg-blue-50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-blue-900">
-            <Award className="h-5 w-5" />
-            Compliance Insights
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-blue-900">
-          <p className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            Overall compliance improved by 3% this period - excellent progress
-          </p>
-          <p className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            Cleanliness standards are being met by 94% of facilities
-          </p>
-          <p className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-yellow-600" />
-            3 facilities need immediate attention (score below 80%)
-          </p>
-          <p className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-yellow-600" />
-            Temperature control remains the area needing most improvement
-          </p>
-        </CardContent>
-      </Card>
+              <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${getScoreBarColor(selectedFacility.averageScore)}`}
+                  style={{ width: `${selectedFacility.averageScore}%` }}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-50 p-3 rounded">
+                  <Label className="text-xs text-gray-500">Total Inspections</Label>
+                  <p className="text-lg font-semibold">{selectedFacility.inspectionCount}</p>
+                </div>
+                <div className="bg-green-50 p-3 rounded">
+                  <Label className="text-xs text-gray-500">Passed</Label>
+                  <p className="text-lg font-semibold text-green-600">{selectedFacility.passCount}</p>
+                </div>
+                <div className="bg-red-50 p-3 rounded">
+                  <Label className="text-xs text-gray-500">Failed</Label>
+                  <p className="text-lg font-semibold text-red-600">{selectedFacility.failCount}</p>
+                </div>
+                <div className="bg-orange-50 p-3 rounded">
+                  <Label className="text-xs text-gray-500">Violations</Label>
+                  <p className="text-lg font-semibold text-orange-600">{selectedFacility.violationCount}</p>
+                </div>
+              </div>
+
+              {selectedFacility.lastInspection && (
+                <div>
+                  <Label className="text-xs text-gray-500">Last Inspection</Label>
+                  <p className="text-gray-900">{formatDate(selectedFacility.lastInspection)}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

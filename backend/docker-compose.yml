@@ -5,7 +5,7 @@ services:
     container_name: farm2table-rabbitmq
     ports:
       - "5672:5672"
-      - "15672:15672"  # Management UI
+      - "15672:15672" # Management UI
     environment:
       RABBITMQ_DEFAULT_USER: farm2table
       RABBITMQ_DEFAULT_PASS: secret
@@ -89,7 +89,7 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=4000
-      - JWT_SECRET=your-secret-key-change-in-production
+      - JWT_SECRET=farm2table_secure_dev_secret
       - AUTH_SERVICE_URL=http://auth-service:3001
       - USER_SERVICE_URL=http://user-service:3002
       - PRODUCT_SERVICE_URL=http://product-service:3003
@@ -152,7 +152,7 @@ services:
       - MONGO_URI=mongodb://mongo-users:27017/users
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
-      - JWT_SECRET=your-secret-key-change-in-production
+      - JWT_SECRET=farm2table_secure_dev_secret
       - JWT_EXPIRES_IN=7d
     depends_on:
       - mongo-users
@@ -177,6 +177,7 @@ services:
       - MONGO_URI=mongodb://mongo-users:27017/users
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
+      - JWT_SECRET=farm2table_secure_dev_secret
     depends_on:
       - mongo-users
       - rabbitmq
@@ -199,6 +200,7 @@ services:
       - MONGO_URI=mongodb://mongo-products:27017/products
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
+      - JWT_SECRET=farm2table_secure_dev_secret
     depends_on:
       - mongo-products
       - rabbitmq
@@ -221,6 +223,9 @@ services:
       - MONGO_URI=mongodb://mongo-orders:27017/orders
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
+      - JWT_SECRET=farm2table_secure_dev_secret
+      - DELIVERY_SERVICE_URL=http://delivery-service:3005
+      - NOTIFICATION_SERVICE_URL=http://notification-service:3007
     depends_on:
       - mongo-orders
       - rabbitmq
@@ -243,6 +248,9 @@ services:
       - MONGO_URI=mongodb://mongo-deliveries:27017/deliveries
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
+      - JWT_SECRET=farm2table_secure_dev_secret
+      - ORDER_SERVICE_URL=http://order-service:3004
+      - NOTIFICATION_SERVICE_URL=http://notification-service:3007
     depends_on:
       - mongo-deliveries
       - rabbitmq
@@ -265,6 +273,7 @@ services:
       - MONGO_URI=mongodb://mongo-health:27017/health
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
+      - JWT_SECRET=farm2table_secure_dev_secret
     depends_on:
       - mongo-health
       - rabbitmq
@@ -288,6 +297,7 @@ services:
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
       - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - JWT_SECRET=farm2table_secure_dev_secret
     depends_on:
       - rabbitmq
       - consul
@@ -308,6 +318,7 @@ services:
       - PORT=3008
       - RABBITMQ_URL=amqp://farm2table:secret@rabbitmq:5672
       - CONSUL_HOST=consul
+      - JWT_SECRET=farm2table_secure_dev_secret
       - AUTH_SERVICE_URL=http://auth-service:3001
       - USER_SERVICE_URL=http://user-service:3002
       - PRODUCT_SERVICE_URL=http://product-service:3003

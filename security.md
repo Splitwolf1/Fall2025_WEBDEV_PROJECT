@@ -412,9 +412,10 @@ HTTP Status: `429 Too Many Requests`
    - Replace `cors()` with specific origin whitelist
    - Example: `cors({ origin: ['https://yourdomain.com'] })`
 
-3. **Environment Variables**
-   - Remove default JWT_SECRET fallback
-   - Use secrets management (AWS Secrets Manager, HashiCorp Vault)
+3. **Environment Variables (CRITICAL Fix)**
+   - **`JWT_SECRET`**: MUST be consistent across **ALL** services (Gateways + Microservices).
+   - If missing in a microservice, it defaults to `'secret'`, causing `403 Invalid Signature` errors when the Gateway (using the correct secret) tries to talk to it.
+   - Use secrets management (AWS Secrets Manager, HashiCorp Vault) in production.
 
 4. **HTTPS/TLS**
    - Enable HTTPS in production

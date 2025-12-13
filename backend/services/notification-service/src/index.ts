@@ -164,6 +164,74 @@ app.post('/notify/role/:role', (req, res) => {
   });
 });
 
+// REST API endpoint to send notification to a specific user
+app.post('/notify/user/:userId', (req, res) => {
+  const { userId } = req.params;
+  const { type, title, message, data } = req.body;
+
+  if (!type || !title || !message) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required fields: type, title, message',
+    });
+  }
+
+  sendNotification(userId, { type, title, message, data });
+
+  res.json({
+    success: true,
+    message: `Notification sent to user ${userId}`,
+  });
+});
+
+// REST API endpoint for user-to-user chat messages
+app.post('/api/messages', (req, res) => {
+  const { fromUserId, toUserId, message, orderId, orderNumber, senderName, senderRole } = req.body;
+
+  if (!fromUserId || !toUserId || !message) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required fields: fromUserId, toUserId, message',
+    });
+  }
+
+  const messageData = {
+    id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    fromUserId,
+    toUserId,
+    message,
+    orderId,
+    orderNumber,
+    senderName: senderName || 'Unknown',
+    senderRole: senderRole || 'user',
+    timestamp: new Date().toISOString(),
+  };
+
+  // Send to recipient
+  sendNotification(toUserId, {
+    type: 'chat_message',
+    title: `Message from ${senderName || 'User'}`,
+    message: message,
+    data: messageData,
+  });
+
+  // Send confirmation to sender (for UI update)
+  sendNotification(fromUserId, {
+    type: 'chat_message_sent',
+    title: 'Message Sent',
+    message: message,
+    data: messageData,
+  });
+
+  console.log(`💬 Chat message: ${fromUserId} -> ${toUserId}: "${message.substring(0, 50)}..."`);
+
+  res.json({
+    success: true,
+    message: 'Message sent',
+    data: messageData,
+  });
+});
+
 // Start server
 const startServer = async () => {
   try {
@@ -226,8 +294,15 @@ const startServer = async () => {
               break;
 
             case 'order.status_updated':
-              // Notify customer of status updates
+              // Notify customer
               sendNotification(eventData.customerId, {
+                type: 'order_update',
+                title: 'Order Status Update',
+                message: `Order ${eventData.orderNumber} is now ${eventData.newStatus.replace('_', ' ')}.`,
+                data: eventData
+              });
+              // Notify farmer
+              sendNotification(eventData.farmerId, {
                 type: 'order_update',
                 title: 'Order Status Update',
                 message: `Order ${eventData.orderNumber} is now ${eventData.newStatus.replace('_', ' ')}.`,
@@ -239,14 +314,76 @@ const startServer = async () => {
               }
               break;
 
-            case 'delivery.status_updated':
-              // Notify about delivery updates
-              sendNotification(eventData.customerId, {
-                type: 'delivery_update',
-                title: 'Delivery Update',
-                message: `Delivery ${eventData.deliveryNumber} status: ${eventData.newStatus.replace('_', ' ')}.`,
+            case 'order.cancelled':
+              // Notify farmer
+              sendNotification(eventData.farmerId, {
+                type: 'order_update',
+                title: 'Order Cancelled',
+                message: `Order ${eventData.orderNumber} has been cancelled by the customer. Reason: ${eventData.cancellationReason || 'No reason provided'}`,
                 data: eventData
               });
+              // Notify customer (confirmation)
+              sendNotification(eventData.customerId, {
+                type: 'order_update',
+                title: 'Order Cancelled',
+                message: `Order ${eventData.orderNumber} was successfully cancelled.`,
+                data: eventData
+              });
+              break;
+
+            case 'delivery.status_updated':
+              // Notify about delivery updates
+
+              // 1. Notify Customer
+              // We need to fetch customerId somehow if not in eventData, but assuming it might be propagated or we just notify if present.
+              // The event from delivery-service might not have customerId. Use distributorId if present.
+
+              // 2. Notify Distributors if 'pickup_pending' (Available for pickup)
+              if (eventData.newStatus === 'pickup_pending') {
+                sendRoleNotification('distributor', {
+                  type: 'delivery',
+                  title: 'New Delivery Available',
+                  message: `Order ${eventData.deliveryNumber} is ready for pickup.`,
+                  data: eventData
+                });
+              }
+
+              // 3. Notify specific distributor if assigned
+              if (eventData.distributorId && eventData.distributorId !== '000000000000000000000000') {
+                sendNotification(eventData.distributorId, {
+                  type: 'delivery',
+                  title: 'Delivery Status Update',
+                  message: `Delivery ${eventData.deliveryNumber} status: ${eventData.newStatus.replace('_', ' ')}.`,
+                  data: eventData
+                });
+              }
+
+              // 4. Notify Farmer (if farmerId is available)
+              if (eventData.farmerId) {
+                const farmerMessage = eventData.newStatus === 'picked_up'
+                  ? `Your order ${eventData.deliveryNumber} has been picked up`
+                  : eventData.newStatus === 'delivered'
+                    ? `Order ${eventData.deliveryNumber} has been delivered`
+                    : `Delivery ${eventData.deliveryNumber} status: ${eventData.newStatus.replace('_', ' ')}`;
+
+                sendNotification(eventData.farmerId, {
+                  type: 'delivery',
+                  title: 'Delivery Update',
+                  message: farmerMessage,
+                  data: eventData
+                });
+              }
+
+              // 5. Notify Customer (if customerId is available in event)
+              if (eventData.customerId) {
+                sendNotification(eventData.customerId, {
+                  type: 'delivery_update',
+                  title: 'Delivery Update',
+                  message: `Delivery ${eventData.deliveryNumber} status: ${eventData.newStatus.replace('_', ' ')}.`,
+                  data: eventData
+                });
+              }
+
               // Send delivery update email
               if (eventData.customerEmail) {
                 emailService.sendDeliveryUpdate(eventData, eventData.customerEmail, eventData.newStatus);
@@ -285,6 +422,16 @@ const startServer = async () => {
                 type: 'violation',
                 title: 'Compliance Issue',
                 message: 'Your facility has failed inspection. Please review the violations.',
+                data: eventData
+              });
+              break;
+
+            case 'rating.created':
+              // Notify the user who was rated
+              sendNotification(eventData.ratedUserId, {
+                type: 'rating',
+                title: 'New Rating Received',
+                message: `You received a ${eventData.rating}⭐ rating from ${eventData.raterName || 'a user'}.`,
                 data: eventData
               });
               break;

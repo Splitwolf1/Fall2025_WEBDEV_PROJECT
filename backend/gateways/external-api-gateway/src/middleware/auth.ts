@@ -36,8 +36,12 @@ export const authenticateToken = (
             role: decoded.role,
         };
         next();
-    } catch (error) {
-        return res.status(403).json({ error: 'Invalid or expired token' });
+    } catch (error: any) {
+        // Return 401 for expired/invalid tokens (not 403)
+        return res.status(401).json({
+            success: false,
+            message: error.name === 'TokenExpiredError' ? 'Token expired' : 'Invalid token'
+        });
     }
 };
 
@@ -51,7 +55,10 @@ export const requireAuth = (
     next: NextFunction
 ) => {
     if (!req.user) {
-        return res.status(401).json({ error: 'Authentication required' });
+        return res.status(401).json({
+            success: false,
+            message: 'Authentication required. Please log in.'
+        });
     }
     next();
 };

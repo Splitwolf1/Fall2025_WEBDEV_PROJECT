@@ -25,6 +25,7 @@ export default function NotificationDropdown() {
   const getNotificationIcon = (type: Notification['type']) => {
     switch (type) {
       case 'order':
+      case 'order_update':
         return '🛒';
       case 'delivery':
         return '🚚';
@@ -36,6 +37,8 @@ export default function NotificationDropdown() {
         return '💬';
       case 'system':
         return 'ℹ️';
+      case 'rating':
+        return '⭐';
       default:
         return '🔔';
     }
@@ -44,6 +47,7 @@ export default function NotificationDropdown() {
   const getNotificationBgColor = (type: Notification['type']) => {
     switch (type) {
       case 'order':
+      case 'order_update':
         return 'bg-green-100';
       case 'delivery':
         return 'bg-blue-100';
@@ -55,6 +59,8 @@ export default function NotificationDropdown() {
         return 'bg-cyan-100';
       case 'system':
         return 'bg-gray-100';
+      case 'rating':
+        return 'bg-yellow-100';
       default:
         return 'bg-gray-100';
     }
@@ -112,60 +118,58 @@ export default function NotificationDropdown() {
           ) : (
             notifications.map((notification, index) => {
               // Ensure unique key: use _id if available, otherwise combine index with createdAt
-              const uniqueKey = notification._id 
-                ? `${notification._id}-${index}` 
+              const uniqueKey = notification._id
+                ? `${notification._id}-${index}`
                 : `notification-${index}-${notification.createdAt || Date.now()}-${notification.title || ''}`;
-              
+
               return (
-              <div
-                key={uniqueKey}
-                className={`p-3 hover:bg-gray-50 cursor-pointer transition-colors ${
-                  !notification.isRead ? 'bg-blue-50' : ''
-                }`}
-                onClick={() => handleNotificationClick(notification)}
-              >
-                <div className="flex gap-3">
-                  <div
-                    className={`h-8 w-8 rounded-full ${getNotificationBgColor(
-                      notification.type
-                    )} flex items-center justify-center flex-shrink-0`}
-                  >
-                    <span className="text-sm">{getNotificationIcon(notification.type)}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <p
-                        className={`text-sm ${
-                          notification.isRead ? 'text-gray-900' : 'font-medium text-gray-900'
-                        }`}
-                      >
-                        {notification.title}
-                      </p>
-                      {!notification.isRead && (
-                        <span className="h-2 w-2 bg-blue-600 rounded-full flex-shrink-0 mt-1" />
-                      )}
+                <div
+                  key={uniqueKey}
+                  className={`p-3 hover:bg-gray-50 cursor-pointer transition-colors ${!notification.isRead ? 'bg-blue-50' : ''
+                    }`}
+                  onClick={() => handleNotificationClick(notification)}
+                >
+                  <div className="flex gap-3">
+                    <div
+                      className={`h-8 w-8 rounded-full ${getNotificationBgColor(
+                        notification.type
+                      )} flex items-center justify-center flex-shrink-0`}
+                    >
+                      <span className="text-sm">{getNotificationIcon(notification.type)}</span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-                      {notification.message}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {notification.createdAt ? (() => {
-                        try {
-                          const date = new Date(notification.createdAt);
-                          if (isNaN(date.getTime())) {
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p
+                          className={`text-sm ${notification.isRead ? 'text-gray-900' : 'font-medium text-gray-900'
+                            }`}
+                        >
+                          {notification.title}
+                        </p>
+                        {!notification.isRead && (
+                          <span className="h-2 w-2 bg-blue-600 rounded-full flex-shrink-0 mt-1" />
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                        {notification.message}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {notification.createdAt ? (() => {
+                          try {
+                            const date = new Date(notification.createdAt);
+                            if (isNaN(date.getTime())) {
+                              return 'Just now';
+                            }
+                            return formatDistanceToNow(date, {
+                              addSuffix: true,
+                            });
+                          } catch (error) {
                             return 'Just now';
                           }
-                          return formatDistanceToNow(date, {
-                            addSuffix: true,
-                          });
-                        } catch (error) {
-                          return 'Just now';
-                        }
-                      })() : 'Just now'}
-                    </p>
+                        })() : 'Just now'}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
               );
             })
           )}

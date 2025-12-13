@@ -26,15 +26,15 @@ router.get('/', async (req: Request, res: Response) => {
     if (distributorId) {
       // Convert string to ObjectId if needed
       const distributorIdStr = typeof distributorId === 'string' ? distributorId : String(distributorId);
-      query.distributorId = mongoose.Types.ObjectId.isValid(distributorIdStr) 
-        ? new mongoose.Types.ObjectId(distributorIdStr) 
+      query.distributorId = mongoose.Types.ObjectId.isValid(distributorIdStr)
+        ? new mongoose.Types.ObjectId(distributorIdStr)
         : distributorIdStr;
     }
     if (orderId) {
       // Convert string to ObjectId if needed
       const orderIdStr = typeof orderId === 'string' ? orderId : String(orderId);
-      query.orderId = mongoose.Types.ObjectId.isValid(orderIdStr) 
-        ? new mongoose.Types.ObjectId(orderIdStr) 
+      query.orderId = mongoose.Types.ObjectId.isValid(orderIdStr)
+        ? new mongoose.Types.ObjectId(orderIdStr)
         : orderIdStr;
     }
     if (status) query.status = status;
@@ -103,31 +103,31 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     console.log('[Delivery-Service] POST /api/deliveries - Creating delivery');
     console.log('[Delivery-Service] Request body:', JSON.stringify(req.body, null, 2));
-    
+
     // Convert string IDs to ObjectIds
     const deliveryData: any = {
       ...req.body,
-      orderId: mongoose.Types.ObjectId.isValid(req.body.orderId) 
-        ? new mongoose.Types.ObjectId(req.body.orderId) 
+      orderId: mongoose.Types.ObjectId.isValid(req.body.orderId)
+        ? new mongoose.Types.ObjectId(req.body.orderId)
         : req.body.orderId,
-      distributorId: mongoose.Types.ObjectId.isValid(req.body.distributorId) 
-        ? new mongoose.Types.ObjectId(req.body.distributorId) 
+      distributorId: mongoose.Types.ObjectId.isValid(req.body.distributorId)
+        ? new mongoose.Types.ObjectId(req.body.distributorId)
         : req.body.distributorId,
     };
-    
+
     // Convert route IDs to ObjectIds
     if (deliveryData.route?.pickup?.farmId) {
       deliveryData.route.pickup.farmId = mongoose.Types.ObjectId.isValid(deliveryData.route.pickup.farmId)
         ? new mongoose.Types.ObjectId(deliveryData.route.pickup.farmId)
         : deliveryData.route.pickup.farmId;
     }
-    
+
     if (deliveryData.route?.delivery?.restaurantId) {
       deliveryData.route.delivery.restaurantId = mongoose.Types.ObjectId.isValid(deliveryData.route.delivery.restaurantId)
         ? new mongoose.Types.ObjectId(deliveryData.route.delivery.restaurantId)
         : deliveryData.route.delivery.restaurantId;
     }
-    
+
     // Ensure location objects have lat and lng as numbers (create if missing)
     if (!deliveryData.route?.pickup?.location) {
       deliveryData.route.pickup.location = { lat: 0, lng: 0 };
@@ -137,7 +137,7 @@ router.post('/', async (req: Request, res: Response) => {
         lng: Number(deliveryData.route.pickup.location.lng) || 0,
       };
     }
-    
+
     if (!deliveryData.route?.delivery?.location) {
       deliveryData.route.delivery.location = { lat: 0, lng: 0 };
     } else {
@@ -146,16 +146,16 @@ router.post('/', async (req: Request, res: Response) => {
         lng: Number(deliveryData.route.delivery.location.lng) || 0,
       };
     }
-    
+
     // Ensure scheduledTime is a Date
     if (deliveryData.route?.pickup?.scheduledTime) {
       deliveryData.route.pickup.scheduledTime = new Date(deliveryData.route.pickup.scheduledTime);
     }
-    
+
     if (deliveryData.route?.delivery?.scheduledTime) {
       deliveryData.route.delivery.scheduledTime = new Date(deliveryData.route.delivery.scheduledTime);
     }
-    
+
     const delivery = new Delivery(deliveryData);
     await delivery.save();
 
@@ -227,7 +227,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     }
 
     console.log(`[Delivery-Service] Updating delivery ${delivery._id} (order ${delivery.orderNumber}) from ${delivery.status} to ${status}`);
-    
+
     // Update distributorId if provided (when distributor accepts)
     if (distributorId) {
       const distributorIdStr = typeof distributorId === 'string' ? distributorId : String(distributorId);
@@ -236,7 +236,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
       }
       console.log(`[Delivery-Service] Assigned distributor: ${distributorId}`);
     }
-    
+
     // Update vehicle info if provided
     if (vehicleInfo && vehicleInfo.type && vehicleInfo.plateNumber) {
       delivery.vehicleInfo = {
@@ -245,7 +245,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
       };
       console.log(`[Delivery-Service] Assigned vehicle: ${vehicleInfo.type} (${vehicleInfo.plateNumber})`);
     }
-    
+
     // Update driver info if provided
     if (driverInfo && driverInfo.name) {
       delivery.driverName = driverInfo.name;
@@ -254,7 +254,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
       }
       console.log(`[Delivery-Service] Assigned driver: ${driverInfo.name}`);
     }
-    
+
     delivery.status = status;
 
     // Update location if provided
@@ -286,11 +286,11 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     let farmerId: string | null = null;
     let customerId: string | null = null;
     try {
-      const orderServiceUrl = process.env.ORDER_SERVICE_URL || 'http://order-service:3003';
+      const orderServiceUrl = process.env.ORDER_SERVICE_URL || 'http://order-service:3004';
       const orderResponse = await axios.get(`${orderServiceUrl}/api/orders/${delivery.orderId}`, {
         timeout: 3000,
       }).catch(() => null);
-      
+
       if (orderResponse?.data?.success && orderResponse.data.order) {
         farmerId = orderResponse.data.order.farmerId?.toString() || null;
         customerId = orderResponse.data.order.customerId?.toString() || null;
@@ -302,9 +302,9 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
 
     // Update order status based on delivery status
     try {
-      const orderServiceUrl = process.env.ORDER_SERVICE_URL || 'http://order-service:3003';
+      const orderServiceUrl = process.env.ORDER_SERVICE_URL || 'http://order-service:3004';
       let orderStatus: string | null = null;
-      
+
       if (status === 'picked_up') {
         orderStatus = 'in_transit';
       } else if (status === 'in_transit') {
@@ -312,7 +312,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
       } else if (status === 'delivered') {
         orderStatus = 'delivered';
       }
-      
+
       if (orderStatus) {
         await axios.patch(`${orderServiceUrl}/api/orders/${delivery.orderId}/status`, {
           status: orderStatus,
@@ -329,7 +329,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     }
 
     // Emit WebSocket notifications for delivery status update
-    const notificationServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:3006';
+    const notificationServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:3007';
     const notificationPromises = [];
 
     // Notify distributor
@@ -354,14 +354,14 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
 
     // Notify farmer (if farmerId is available)
     if (farmerId) {
-      const farmerMessage = status === 'picked_up' 
+      const farmerMessage = status === 'picked_up'
         ? `Your order ${delivery.orderNumber} has been picked up from your farm`
         : status === 'in_transit'
-        ? `Order ${delivery.orderNumber} is in transit to the restaurant`
-        : status === 'delivered'
-        ? `Order ${delivery.orderNumber} has been delivered to the restaurant`
-        : `Delivery ${delivery.orderNumber} status changed to ${status}`;
-        
+          ? `Order ${delivery.orderNumber} is in transit to the restaurant`
+          : status === 'delivered'
+            ? `Order ${delivery.orderNumber} has been delivered to the restaurant`
+            : `Delivery ${delivery.orderNumber} status changed to ${status}`;
+
       notificationPromises.push(
         axios.post(`${notificationServiceUrl}/notify/user/${farmerId}`, {
           type: 'delivery',
@@ -387,11 +387,11 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
       const restaurantMessage = status === 'picked_up'
         ? `Order ${delivery.orderNumber} has been picked up from the farm`
         : status === 'in_transit'
-        ? `Order ${delivery.orderNumber} is on the way to your restaurant`
-        : status === 'delivered'
-        ? `Order ${delivery.orderNumber} has been delivered to your restaurant`
-        : `Delivery ${delivery.orderNumber} status changed to ${status}`;
-        
+          ? `Order ${delivery.orderNumber} is on the way to your restaurant`
+          : status === 'delivered'
+            ? `Order ${delivery.orderNumber} has been delivered to your restaurant`
+            : `Delivery ${delivery.orderNumber} status changed to ${status}`;
+
       notificationPromises.push(
         axios.post(`${notificationServiceUrl}/notify/user/${customerId}`, {
           type: 'delivery',
@@ -421,12 +421,12 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
         // Find and update driver status to available
         if (delivery.driverName) {
           await Driver.updateOne(
-            { 
+            {
               distributorId: delivery.distributorId,
               name: delivery.driverName,
               status: { $ne: 'off_duty' } // Only update if not off duty
             },
-            { 
+            {
               status: 'available',
               vehicleAssigned: null,
               $inc: { deliveriesCompleted: 1, deliveriesToday: 1 }
@@ -438,12 +438,12 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
         // Find and update vehicle status to available
         if (delivery.vehicleInfo?.plateNumber) {
           await Vehicle.updateOne(
-            { 
+            {
               distributorId: delivery.distributorId,
               licensePlate: delivery.vehicleInfo.plateNumber,
               status: 'active'
             },
-            { 
+            {
               status: 'available',
               currentDriver: null
             }
@@ -470,6 +470,8 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
         deliveryNumber: delivery.orderNumber,
         orderId: delivery.orderId,
         distributorId: delivery.distributorId,
+        farmerId: farmerId,
+        customerId: customerId,
         previousStatus: delivery.timeline.length > 1 ? delivery.timeline[delivery.timeline.length - 2]?.status : undefined,
         newStatus: delivery.status,
         location: req.body.location,

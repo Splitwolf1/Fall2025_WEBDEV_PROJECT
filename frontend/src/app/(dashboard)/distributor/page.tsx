@@ -101,9 +101,20 @@ export default function DistributorDashboard() {
         setUser(userResponse.user);
       }
 
-      // Fetch deliveries
-      const deliveriesResponse: any = await apiClient.getDeliveries({ distributorId, limit: '50' });
-      const deliveries = deliveriesResponse.success ? deliveriesResponse.deliveries || [] : [];
+      // Fetch deliveries assigned to this distributor
+      const assignedResponse: any = await apiClient.getDeliveries({ distributorId, limit: 50 });
+      const assignedDeliveries = assignedResponse.success ? assignedResponse.deliveries || [] : [];
+
+      // Fetch available deliveries (pickup_pending) - effectively unassigned or open market
+      const availableResponse: any = await apiClient.getDeliveries({ status: 'pickup_pending', limit: 20 });
+      const availableDeliveries = availableResponse.success ? availableResponse.deliveries || [] : [];
+
+      // Merge handling duplicates
+      const allDeliveriesMap = new Map();
+      [...assignedDeliveries, ...availableDeliveries].forEach(d => {
+        allDeliveriesMap.set(d._id, d);
+      });
+      const deliveries: any[] = Array.from(allDeliveriesMap.values());
 
       // Get today's date
       const today = new Date();
@@ -113,7 +124,7 @@ export default function DistributorDashboard() {
 
       // Filter active deliveries
       const activeDeliveriesList = deliveries.filter(
-        (d: Delivery) => d.status === 'scheduled' || d.status === 'picked_up' || d.status === 'in_transit'
+        (d: Delivery) => d.status === 'scheduled' || d.status === 'pickup_pending' || d.status === 'picked_up' || d.status === 'in_transit'
       );
 
       const inProgressDeliveries = deliveries.filter(
@@ -123,7 +134,7 @@ export default function DistributorDashboard() {
       // Filter today's completed deliveries
       const todayCompleted = deliveries.filter((d: Delivery) => {
         if (d.status !== 'delivered') return false;
-        const deliveredDate = d.route?.delivery?.actualTime 
+        const deliveredDate = d.route?.delivery?.actualTime
           ? new Date(d.route.delivery.actualTime)
           : new Date(d.createdAt);
         return deliveredDate >= today && deliveredDate <= todayEnd;
@@ -155,14 +166,14 @@ export default function DistributorDashboard() {
           try {
             const orderResponse: any = await apiClient.getOrder(delivery.orderId);
             if (orderResponse.success && orderResponse.order?.items) {
-              items = orderResponse.order.items.map((item: any) => 
+              items = orderResponse.order.items.map((item: any) =>
                 `${item.productName} (${item.quantity} ${item.unit})`
               );
             }
           } catch (err) {
             items = ['Items loading...'];
           }
-          
+
           return {
             id: `ROUTE-${delivery._id.slice(-3)}`,
             driver: delivery.driverName || 'Unassigned',
@@ -170,12 +181,12 @@ export default function DistributorDashboard() {
             stops: 1, // Single delivery per route
             completed: delivery.status === 'delivered' ? 1 : 0,
             currentStop: delivery.route?.delivery?.location?.address || 'En route',
-            eta: delivery.route?.delivery?.scheduledTime 
+            eta: delivery.route?.delivery?.scheduledTime
               ? new Date(delivery.route.delivery.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
               : 'TBD',
-            status: delivery.status === 'in_transit' ? 'on_time' : 
-                    delivery.status === 'picked_up' ? 'picking_up' : 'scheduled',
-            pickupTime: delivery.route?.pickup?.scheduledTime 
+            status: delivery.status === 'in_transit' ? 'on_time' :
+              delivery.status === 'picked_up' ? 'picking_up' : 'scheduled',
+            pickupTime: delivery.route?.pickup?.scheduledTime
               ? new Date(delivery.route.pickup.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
               : 'TBD',
             items,
@@ -186,9 +197,9 @@ export default function DistributorDashboard() {
 
       // Get upcoming pickups (scheduled deliveries) - fetch order details
       const upcomingDeliveriesList = deliveries
-        .filter((d: Delivery) => d.status === 'scheduled')
-        .sort((a: Delivery, b: Delivery) => 
-          new Date(a.route?.pickup?.scheduledTime || a.createdAt).getTime() - 
+        .filter((d: Delivery) => d.status === 'scheduled' || d.status === 'pickup_pending')
+        .sort((a: Delivery, b: Delivery) =>
+          new Date(a.route?.pickup?.scheduledTime || a.createdAt).getTime() -
           new Date(b.route?.pickup?.scheduledTime || b.createdAt).getTime()
         )
         .slice(0, 3);
@@ -198,11 +209,11 @@ export default function DistributorDashboard() {
           const pickupTime = delivery.route?.pickup?.scheduledTime
             ? new Date(delivery.route.pickup.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
             : 'TBD';
-          
+
           let farm = 'Loading...';
           let items = 'Loading items...';
           let destination = 'Loading...';
-          
+
           try {
             const orderResponse: any = await apiClient.getOrder(delivery.orderId);
             if (orderResponse.success && orderResponse.order) {
@@ -210,7 +221,7 @@ export default function DistributorDashboard() {
               // Get farmer name from order items
               if (order.items && order.items.length > 0) {
                 farm = order.items[0].farmerName || 'Farm';
-                items = order.items.map((item: any) => 
+                items = order.items.map((item: any) =>
                   `${item.productName} (${item.quantity} ${item.unit})`
                 ).join(', ');
               }
@@ -219,7 +230,7 @@ export default function DistributorDashboard() {
           } catch (err) {
             // Keep placeholder values
           }
-          
+
           return {
             id: `PICKUP-${delivery._id.slice(-3)}`,
             farm,
@@ -251,21 +262,21 @@ export default function DistributorDashboard() {
       // Calculate average delivery time from completed deliveries
       let avgDeliveryTime = 'N/A';
       let deliveryTimeCount = 0;
-      
+
       const completedDeliveries = deliveries.filter((d: Delivery) => d.status === 'delivered');
       let totalHours = 0;
-      
+
       for (const delivery of completedDeliveries.slice(0, 10)) { // Limit to avoid too many calculations
         try {
-          const pickupTime = delivery.route?.pickup?.actualTime 
+          const pickupTime = delivery.route?.pickup?.actualTime
             ? new Date(delivery.route.pickup.actualTime)
             : delivery.route?.pickup?.scheduledTime
-            ? new Date(delivery.route.pickup.scheduledTime)
-            : null;
-          const deliveryTime = delivery.route?.delivery?.actualTime 
+              ? new Date(delivery.route.pickup.scheduledTime)
+              : null;
+          const deliveryTime = delivery.route?.delivery?.actualTime
             ? new Date(delivery.route.delivery.actualTime)
             : null;
-          
+
           if (pickupTime && deliveryTime && deliveryTime > pickupTime) {
             const diffHours = (deliveryTime.getTime() - pickupTime.getTime()) / (1000 * 60 * 60);
             totalHours += diffHours;
@@ -275,7 +286,7 @@ export default function DistributorDashboard() {
           // Skip invalid dates
         }
       }
-      
+
       if (deliveryTimeCount > 0) {
         const avgHours = totalHours / deliveryTimeCount;
         if (avgHours < 1) {
@@ -289,7 +300,7 @@ export default function DistributorDashboard() {
       let avgRating = '0';
       let reviewsText = '0 reviews';
       try {
-        const ratingsResponse: any = await apiClient.getUserRatings(currentUser.id, 'delivery');
+        const ratingsResponse: any = await apiClient.getUserRatings(distributorId, 'delivery');
         if (ratingsResponse.success && ratingsResponse.stats) {
           avgRating = ratingsResponse.stats.averageRating.toString();
           const count = ratingsResponse.stats.totalRatings;
@@ -402,103 +413,103 @@ export default function DistributorDashboard() {
 
   return (
     <div className="p-8">
-        <div className="space-y-8">
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Deliveries
-                </CardTitle>
-                <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
-                  <Truck className="h-4 w-4 text-blue-600" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.activeDeliveries.value}</div>
-                <p className="text-xs text-gray-500 mt-1">{stats.activeDeliveries.status}</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Completed Today
-                </CardTitle>
-                <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.completedToday.value}</div>
-                <p className="text-xs text-gray-500 mt-1">{stats.completedToday.onTime}</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Today's Revenue
-                </CardTitle>
-                <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
-                  <DollarSign className="h-4 w-4 text-green-600" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalRevenue.value}</div>
-                <p className="text-xs text-green-600 mt-1 font-medium">
-                  {stats.totalRevenue.change} vs yesterday
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Avg Delivery Time
-                </CardTitle>
-                <div className="h-8 w-8 rounded-full bg-orange-100 flex items-center justify-center">
-                  <Clock className="h-4 w-4 text-orange-600" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.avgDeliveryTime.value}</div>
-                <p className="text-xs text-green-600 mt-1 font-medium">
-                  {stats.avgDeliveryTime.status}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Customer Rating
-                </CardTitle>
-                <div className="h-8 w-8 rounded-full bg-yellow-100 flex items-center justify-center">
-                  ⭐
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.rating.value} ⭐</div>
-                <p className="text-xs text-gray-500 mt-1">From {stats.rating.reviews}</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Active Routes */}
+      <div className="space-y-8">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Active Routes</CardTitle>
-              <Button variant="ghost" size="sm">
-                View All
-              </Button>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium text-gray-600">
+                Deliveries
+              </CardTitle>
+              <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                <Truck className="h-4 w-4 text-blue-600" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {activeRoutes.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">No active routes</p>
-                ) : (
-                  activeRoutes.map((route) => (
+              <div className="text-2xl font-bold">{stats.activeDeliveries.value}</div>
+              <p className="text-xs text-gray-500 mt-1">{stats.activeDeliveries.status}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium text-gray-600">
+                Completed Today
+              </CardTitle>
+              <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.completedToday.value}</div>
+              <p className="text-xs text-gray-500 mt-1">{stats.completedToday.onTime}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium text-gray-600">
+                Today's Revenue
+              </CardTitle>
+              <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
+                <DollarSign className="h-4 w-4 text-green-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.totalRevenue.value}</div>
+              <p className="text-xs text-green-600 mt-1 font-medium">
+                {stats.totalRevenue.change} vs yesterday
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium text-gray-600">
+                Avg Delivery Time
+              </CardTitle>
+              <div className="h-8 w-8 rounded-full bg-orange-100 flex items-center justify-center">
+                <Clock className="h-4 w-4 text-orange-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.avgDeliveryTime.value}</div>
+              <p className="text-xs text-green-600 mt-1 font-medium">
+                {stats.avgDeliveryTime.status}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium text-gray-600">
+                Customer Rating
+              </CardTitle>
+              <div className="h-8 w-8 rounded-full bg-yellow-100 flex items-center justify-center">
+                ⭐
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.rating.value} ⭐</div>
+              <p className="text-xs text-gray-500 mt-1">From {stats.rating.reviews}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Active Routes */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Active Routes</CardTitle>
+            <Button variant="ghost" size="sm">
+              View All
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {activeRoutes.length === 0 ? (
+                <p className="text-center text-gray-500 py-8">No active routes</p>
+              ) : (
+                activeRoutes.map((route) => (
                   <div
                     key={route.id}
                     className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
@@ -550,9 +561,9 @@ export default function DistributorDashboard() {
                     </div>
 
                     <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         className="gap-1"
                         onClick={() => router.push(`/distributor/tracking?deliveryId=${route.deliveryId}`)}
                       >
@@ -562,8 +573,8 @@ export default function DistributorDashboard() {
                       <Button variant="outline" size="sm">
                         Contact Driver
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         onClick={() => router.push(`/distributor/deliveries`)}
                       >
@@ -571,28 +582,28 @@ export default function DistributorDashboard() {
                       </Button>
                     </div>
                   </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
-          {/* Upcoming Pickups & Fleet Status */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Upcoming Pickups */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Upcoming Pickups</CardTitle>
-                <Button variant="ghost" size="sm">
-                  Schedule
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {upcomingPickups.length === 0 ? (
-                    <p className="text-center text-gray-500 py-8">No upcoming pickups scheduled</p>
-                  ) : (
-                    upcomingPickups.map((pickup) => (
+        {/* Upcoming Pickups & Fleet Status */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Upcoming Pickups */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Upcoming Pickups</CardTitle>
+              <Button variant="ghost" size="sm">
+                Schedule
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {upcomingPickups.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">No upcoming pickups scheduled</p>
+                ) : (
+                  upcomingPickups.map((pickup) => (
                     <div
                       key={pickup.id}
                       className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
@@ -619,9 +630,9 @@ export default function DistributorDashboard() {
                         <MapPin className="h-4 w-4" />
                         <span>Deliver to: {pickup.destination}</span>
                       </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         className="mt-3 w-full"
                         onClick={() => router.push(`/distributor/schedule`)}
                       >
@@ -629,22 +640,22 @@ export default function DistributorDashboard() {
                       </Button>
                     </div>
                   ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-            {/* Fleet Status */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Fleet Status</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {fleetStatus.length === 0 ? (
-                    <p className="text-center text-gray-500 py-8">No fleet data available</p>
-                  ) : (
-                    fleetStatus.map((vehicle) => (
+          {/* Fleet Status */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Fleet Status</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {fleetStatus.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">No fleet data available</p>
+                ) : (
+                  fleetStatus.map((vehicle) => (
                     <div
                       key={vehicle.vehicle}
                       className="flex items-center justify-between p-3 border rounded-lg"
@@ -678,38 +689,38 @@ export default function DistributorDashboard() {
                       </div>
                     </div>
                   ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Button variant="outline" className="h-24 flex-col gap-2">
-                  <Navigation className="h-6 w-6" />
-                  <span>Plan Route</span>
-                </Button>
-                <Button variant="outline" className="h-24 flex-col gap-2">
-                  <Package className="h-6 w-6" />
-                  <span>View Orders</span>
-                </Button>
-                <Button variant="outline" className="h-24 flex-col gap-2">
-                  <Truck className="h-6 w-6" />
-                  <span>Manage Fleet</span>
-                </Button>
-                <Button variant="outline" className="h-24 flex-col gap-2">
-                  <CheckCircle className="h-6 w-6" />
-                  <span>Delivery History</span>
-                </Button>
+                )}
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Quick Actions */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Button variant="outline" className="h-24 flex-col gap-2">
+                <Navigation className="h-6 w-6" />
+                <span>Plan Route</span>
+              </Button>
+              <Button variant="outline" className="h-24 flex-col gap-2">
+                <Package className="h-6 w-6" />
+                <span>View Orders</span>
+              </Button>
+              <Button variant="outline" className="h-24 flex-col gap-2">
+                <Truck className="h-6 w-6" />
+                <span>Manage Fleet</span>
+              </Button>
+              <Button variant="outline" className="h-24 flex-col gap-2">
+                <CheckCircle className="h-6 w-6" />
+                <span>Delivery History</span>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

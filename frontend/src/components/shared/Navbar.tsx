@@ -13,6 +13,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import NotificationDropdown from './NotificationDropdown';
+import MessageInboxBadge from './MessageInboxBadge';
 import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/auth';
 
@@ -82,10 +83,8 @@ export default function Navbar({ userRole, userName }: NavbarProps) {
               <Search className="h-5 w-5" />
             </Button>
 
-            {/* Chatbot */}
-            <Button variant="ghost" size="icon" className="relative">
-              <MessageSquare className="h-5 w-5" />
-            </Button>
+            {/* Message Inbox */}
+            <MessageInboxBadge />
 
             {/* Real-Time Notifications */}
             <NotificationDropdown />

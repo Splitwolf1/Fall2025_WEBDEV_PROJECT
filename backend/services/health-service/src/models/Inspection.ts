@@ -67,7 +67,7 @@ const InspectionSchema = new Schema<IInspection>(
     },
     targetType: {
       type: String,
-      enum: ['farm', 'distributor', 'batch'],
+      enum: ['farm', 'distributor', 'batch', 'restaurant'],
       required: true,
     },
     targetId: {

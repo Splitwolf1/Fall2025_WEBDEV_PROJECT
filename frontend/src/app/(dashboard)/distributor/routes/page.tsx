@@ -110,21 +110,33 @@ export default function AvailableDeliveriesPage() {
   const fetchAvailableDeliveries = async () => {
     try {
       setIsLoading(true);
-      // Fetch ONLY deliveries that are ready for pickup (pickup_pending)
-      // Exclude scheduled, picked_up, in_transit, delivered - those appear in Deliveries
-      const deliveriesResponse: any = await apiClient.getDeliveries({ 
-        status: 'pickup_pending',
-        limit: '100' 
+      // Fetch deliveries that are available for pickup
+      // This includes both 'scheduled' (newly created) and 'pickup_pending' (ready for pickup)
+      const [scheduledResponse, pickupPendingResponse]: any[] = await Promise.all([
+        apiClient.getDeliveries({ status: 'scheduled', limit: 100 }),
+        apiClient.getDeliveries({ status: 'pickup_pending', limit: 100 }),
+      ]);
+
+      const scheduledDeliveries = scheduledResponse.success ? scheduledResponse.deliveries || [] : [];
+      const pickupPendingDeliveries = pickupPendingResponse.success ? pickupPendingResponse.deliveries || [] : [];
+
+      // Combine and deduplicate
+      const allDeliveriesMap = new Map();
+      [...scheduledDeliveries, ...pickupPendingDeliveries].forEach((d: any) => {
+        allDeliveriesMap.set(d._id, d);
       });
-      
-      let deliveriesList = deliveriesResponse.success ? deliveriesResponse.deliveries || [] : [];
-      
-      // Double-check: filter out any deliveries that are not pickup_pending
-      deliveriesList = deliveriesList.filter((d: any) => 
-        d.status === 'pickup_pending' || d.status === 'ready_for_pickup'
+
+      let deliveriesList = Array.from(allDeliveriesMap.values());
+
+      // Filter to only unassigned or placeholder distributor deliveries
+      deliveriesList = deliveriesList.filter((d: any) =>
+        !d.distributorId ||
+        d.distributorId === '000000000000000000000000' ||
+        d.status === 'pickup_pending' ||
+        d.status === 'scheduled'
       );
-      
-      console.log(`[Available Deliveries] Found ${deliveriesList.length} pickup_pending deliveries`);
+
+      console.log(`[Available Deliveries] Found ${deliveriesList.length} available deliveries`);
 
       // Fetch order details for each delivery
       const ordersMap: { [key: string]: Order } = {};
@@ -159,7 +171,7 @@ export default function AvailableDeliveriesPage() {
       }
 
       // Fetch available vehicles and drivers
-      const [vehiclesResponse, driversResponse, offDutyDriversResponse] = await Promise.all([
+      const [vehiclesResponse, driversResponse, offDutyDriversResponse]: any[] = await Promise.all([
         apiClient.getVehicles(user.id, 'available'),
         apiClient.getDrivers(user.id, 'available'), // Fetch drivers with 'available' status
         apiClient.getDrivers(user.id, 'off_duty'), // Fallback: also fetch off_duty drivers
@@ -167,13 +179,13 @@ export default function AvailableDeliveriesPage() {
 
       const availableVehicles = vehiclesResponse.success ? vehiclesResponse.vehicles || [] : [];
       let availableDrivers = driversResponse.success ? driversResponse.drivers || [] : [];
-      
+
       // If no available drivers, use off_duty as fallback
       if (availableDrivers.length === 0 && offDutyDriversResponse.success) {
         availableDrivers = offDutyDriversResponse.drivers || [];
         console.log('[Available Deliveries] No available drivers, using off_duty drivers as fallback');
       }
-      
+
       console.log('[Available Deliveries] Fetched vehicles:', availableVehicles.length);
       console.log('[Available Deliveries] Fetched drivers:', availableDrivers.length);
       console.log('[Available Deliveries] Driver response:', driversResponse);
@@ -237,7 +249,7 @@ export default function AvailableDeliveriesPage() {
       if (response.success) {
         // Update vehicle and driver status
         await Promise.all([
-          apiClient.updateVehicle(selectedVehicleId, { 
+          apiClient.updateVehicle(selectedVehicleId, {
             status: 'active',
             currentDriver: selectedDriverId,
           }),
@@ -253,13 +265,13 @@ export default function AvailableDeliveriesPage() {
         setSelectedDelivery(null);
         setSelectedVehicleId('');
         setSelectedDriverId('');
-        
+
         // Refresh the list to ensure it's up to date
         await fetchAvailableDeliveries();
-        
+
         // Show success message
         alert('Delivery assigned successfully! It will now appear in Deliveries.');
-        
+
         // Optionally navigate to active deliveries
         // router.push('/distributor/deliveries');
       } else {
@@ -320,11 +332,11 @@ export default function AvailableDeliveriesPage() {
             <div className="text-2xl font-bold text-blue-600">
               {deliveries.length > 0
                 ? calculateDistance(
-                    deliveries[0].route.pickup.location.lat,
-                    deliveries[0].route.pickup.location.lng,
-                    deliveries[0].route.delivery.location.lat,
-                    deliveries[0].route.delivery.location.lng
-                  )
+                  deliveries[0].route.pickup.location.lat,
+                  deliveries[0].route.pickup.location.lng,
+                  deliveries[0].route.delivery.location.lat,
+                  deliveries[0].route.delivery.location.lng
+                )
                 : '0 mi'}
             </div>
             <p className="text-xs text-gray-500 mt-1">Per delivery</p>
@@ -501,7 +513,7 @@ export default function AvailableDeliveriesPage() {
               Select a vehicle and driver for this delivery
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             {/* Vehicle Selection */}
             <div className="space-y-2">

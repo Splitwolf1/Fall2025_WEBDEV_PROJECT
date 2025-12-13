@@ -80,10 +80,11 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
 });
 
-// Get all users by role (for restaurants to find farmers/suppliers)
+// Get all users by role (for restaurants to find farmers, inspectors to find facilities)
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
     try {
         const { role } = req.query;
+        const requestingUserRole = (req as any).user?.role;
 
         if (!role) {
             return res.status(400).json({
@@ -92,11 +93,22 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
             });
         }
 
-        // Only allow fetching farmers for now (suppliers for restaurants)
-        if (role !== UserRole.FARMER) {
+        // Inspectors can fetch any role (for scheduling inspections)
+        // Other users can only fetch farmers (suppliers)
+        const allowedRoles = [UserRole.FARMER, UserRole.RESTAURANT, UserRole.DISTRIBUTOR];
+        const isInspector = requestingUserRole === UserRole.INSPECTOR;
+
+        if (!isInspector && role !== UserRole.FARMER) {
             return res.status(403).json({
                 success: false,
                 message: 'Only farmers can be fetched as suppliers',
+            });
+        }
+
+        if (!allowedRoles.includes(role as UserRole)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid role parameter',
             });
         }
 
@@ -108,11 +120,17 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
         res.json({
             success: true,
             users: users.map(user => ({
+                _id: user._id,
                 id: user._id,
                 email: user.email,
+                name: user.profile ? `${user.profile.firstName} ${user.profile.lastName}` : user.email,
+                businessName: user.farmDetails?.farmName || user.restaurantDetails?.businessName || user.distributorDetails?.companyName,
                 role: user.role,
                 profile: user.profile,
                 farmDetails: user.farmDetails,
+                restaurantDetails: user.restaurantDetails,
+                distributorDetails: user.distributorDetails,
+                address: user.farmDetails?.address || user.restaurantDetails?.address,
                 createdAt: user.createdAt,
             })),
         });
