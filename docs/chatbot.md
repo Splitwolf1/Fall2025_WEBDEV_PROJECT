@@ -1,259 +1,161 @@
-# 🤖 Chatbot Architecture & API Communication Guide
+# 🤖 How the Chatbot Works (Simple Explanation)
 
-This document explains how the chatbot works and how services communicate in the Farm-to-Table application.
-
----
-
-## Table of Contents
-
-1. [Chatbot Overview](#chatbot-overview)
-2. [Chatbot Files](#chatbot-files)
-3. [Complete Chat Flow](#complete-chat-flow)
-4. [Intent Detection](#intent-detection)
-5. [Response Generation](#response-generation)
-6. [Service Calls](#service-calls)
-7. [Role-Based UI](#role-based-ui)
-8. [External vs Internal APIs](#external-vs-internal-apis)
-9. [Service Communication Methods](#service-communication-methods)
-10. [File Reference](#file-reference)
+Hey! Let me explain how our chatbot works like I'm talking to a friend who's new to coding.
 
 ---
 
-## Chatbot Overview
+## What Does the Chatbot Do?
 
-The chatbot is an AI assistant that helps users with common tasks:
-- Track orders
-- View inspections and violations
-- Find products
-- Connect with farmers/restaurants/distributors
+Think of it as a **smart assistant** that can:
+- ✅ Answer questions about orders ("Track my order ORD-1234")
+- ✅ Connect you with farmers/restaurants ("Talk to farmer")
+- ✅ Help inspectors check violations ("Show recent violations")
+- ✅ Find products ("Do you have tomatoes?")
 
 ---
 
-## Chatbot Files
+## The 4 Files That Make It Work
 
 ```
 /backend/services/chatbot-service/src/
-├── index.ts      → Entry point, API endpoint
-├── intents.ts    → Understands WHAT user is asking
-├── handlers.ts   → Generates the response
-└── services.ts   → Talks to other services for data
+├── index.ts      → The "front door" - receives your message
+├── intents.ts    → The "brain" - understands what you're asking
+├── handlers.ts   → The "mouth" - creates the response
+└── services.ts   → The "hands" - grabs data from other services
 ```
 
-```
-/frontend/src/components/shared/
-└── ChatWidget.tsx → The chat UI component
-```
+Let's walk through each one...
 
 ---
 
-## Complete Chat Flow
+## 📁 File 1: `index.ts` - The Front Door
 
-Here's the journey of a chat message from typing to response:
+**What it does:** Receives chat messages and sends back responses.
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 1: User Types "Track my order ORD-1234-5678"                      │
-│  📁 ChatWidget.tsx (lines 200-250)                                      │
-└───────────────────────────────────┬─────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 2: Frontend sends POST to /api/chat                               │
-│  📁 ChatWidget.tsx → axios.post('/api/chat', { message, userId })       │
-└───────────────────────────────────┬─────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 3: Gateway routes to chatbot-service (port 3008)                  │
-│  📁 external-api-gateway/src/routes.ts (lines 286-314)                  │
-└───────────────────────────────────┬─────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 4: Chatbot receives message                                        │
-│  📁 chatbot-service/src/index.ts (lines 39-84)                          │
-│                                                                          │
-│  app.post('/api/chat', async (req, res) => {                            │
-│    const { message, userId } = req.body;                                │
-│    const intent = detectIntent(message);        ← STEP 5                │
-│    const response = await generateResponse(...); ← STEP 6              │
-│    res.json({ success: true, intent, response });                       │
-│  });                                                                     │
-└───────────────────────────────────┬─────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 5: Intent Detection                                                │
-│  📁 chatbot-service/src/intents.ts (lines 129-169)                      │
-│                                                                          │
-│  "Track my order ORD-1234" → TRACK_ORDER intent                         │
-└───────────────────────────────────┬─────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 6: Generate Response                                               │
-│  📁 chatbot-service/src/handlers.ts                                     │
-│                                                                          │
-│  switch (intent) {                                                       │
-│    case TRACK_ORDER:                                                     │
-│      // Extract order number, call services, format response            │
-│  }                                                                       │
-└───────────────────────────────────┬─────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 7: Service-to-Service Calls                                        │
-│  📁 chatbot-service/src/services.ts                                     │
-│                                                                          │
-│  const order = await axios.get('http://order-service:3004/api/orders'); │
-│  const delivery = await axios.get('http://delivery-service:3005/...');  │
-└───────────────────────────────────┬─────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 8: Response sent back to frontend                                  │
-│  📁 ChatWidget.tsx receives and displays the message                    │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+**Think of it like:** A receptionist at a help desk. You tell them your problem, they figure out who can help, and get you an answer.
 
----
-
-## Intent Detection
-
-📁 **File:** [intents.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/services/chatbot-service/src/intents.ts)
-
-This is how the chatbot **understands** what you're asking.
-
-### Available Intents
+**The important part:**
 
 ```typescript
-export enum ChatIntent {
-  TRACK_ORDER = 'track_order',           // "Track my order"
-  TRACK_INSPECTION = 'track_inspection', // "View inspection INS-702"
-  GET_VIOLATIONS = 'get_violations',     // "Show recent violations"
-  GET_INSPECTIONS = 'get_inspections',   // "Upcoming inspections"
-  PRODUCT_INQUIRY = 'product_inquiry',   // "Do you have tomatoes?"
-  PRICING = 'pricing',                   // "How much is it?"
-  DELIVERY_TIME = 'delivery_time',       // "When will it arrive?"
-  COMPLAINT = 'complaint',               // "I have a problem"
-  HELP = 'help',                         // "Help me"
-  GREETING = 'greeting',                 // "Hi" or "Hello"
-  CHAT_WITH_PARTY = 'chat_with_party',   // "Talk to farmer"
-  UNKNOWN = 'unknown',                   // Fallback
+// When someone sends a message to /api/chat
+app.post('/api/chat', async (req, res) => {
+  const { message, userId } = req.body;
+  
+  // Step 1: Figure out what they're asking
+  const intent = detectIntent(message);
+  
+  // Step 2: Generate the answer
+  const response = await generateResponse(intent, message, userId);
+  
+  // Step 3: Send it back
+  res.json({ success: true, intent, response });
+});
+```
+
+**Where to find it:** [index.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/services/chatbot-service/src/index.ts) (lines 39-84)
+
+---
+
+## 📁 File 2: `intents.ts` - The Brain
+
+**What it does:** Figures out WHAT the user is asking.
+
+**Think of it like:** When someone says "I need to track my package", your brain understands they want shipping information - not a weather report.
+
+**How it works:**
+
+```typescript
+// These are all the things the chatbot can understand
+enum ChatIntent {
+  TRACK_ORDER,        // "Where's my order?"
+  TRACK_INSPECTION,   // "Show inspection INS-702"
+  GET_VIOLATIONS,     // "Show recent violations"
+  GREETING,           // "Hi" or "Hello"
+  CHAT_WITH_PARTY,    // "Talk to farmer"
+  HELP,               // "Help me"
+  UNKNOWN,            // "aslkdjfalskjdf" (gibberish)
 }
 ```
 
-### Pattern Matching
-
-Each intent has **keywords** and **regex patterns**:
+**The magic - Pattern Matching:**
 
 ```typescript
-const intentPatterns = {
-  [ChatIntent.TRACK_ORDER]: {
-    keywords: ['track', 'order', 'status', 'where'],
-    patterns: [
-      /track.*order/i,        // "track my order"
-      /order.*status/i,       // "what's my order status"
-      /ORD-\d+-\d+/i,         // Order number like ORD-1234-5678
-    ],
-  },
-  [ChatIntent.GET_VIOLATIONS]: {
-    keywords: ['violation', 'violations', 'non-compliance'],
-    patterns: [
-      /show.*violation/i,
-      /recent.*violation/i,
-    ],
-  },
-  // ... more intents
-};
+// For TRACK_ORDER, we look for these patterns:
+keywords: ['track', 'order', 'status', 'where']
+patterns: [
+  /track.*order/i,      // "track my order" ✅
+  /order.*status/i,     // "order status please" ✅
+  /ORD-\d+-\d+/i,       // "ORD-1234-5678" ✅
+]
 ```
 
-### The Detection Logic
+So if you type "Where is my order ORD-1234?", it matches:
+- ✅ Contains "order" keyword
+- ✅ Contains "ORD-1234" pattern
+- → Intent = **TRACK_ORDER**
 
-```typescript
-export const detectIntent = (message: string): ChatIntent => {
-  // 1. Check priority patterns first
-  if (/talk to.*farmer.*ORD-\d+/.test(message)) {
-    return ChatIntent.CHAT_WITH_PARTY;
-  }
-
-  // 2. Check regex patterns
-  for (const [intent, { patterns }] of Object.entries(intentPatterns)) {
-    if (patterns.some(pattern => pattern.test(message))) {
-      return intent;
-    }
-  }
-
-  // 3. Check keywords
-  for (const [intent, { keywords }] of Object.entries(intentPatterns)) {
-    if (keywords.some(keyword => message.includes(keyword))) {
-      return intent;
-    }
-  }
-
-  return ChatIntent.UNKNOWN; // Fallback
-};
-```
+**Where to find it:** [intents.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/services/chatbot-service/src/intents.ts)
 
 ---
 
-## Response Generation
+## 📁 File 3: `handlers.ts` - The Mouth
 
-📁 **File:** [handlers.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/services/chatbot-service/src/handlers.ts)
+**What it does:** Creates the actual response to send back.
 
-Once the intent is detected, the handler creates the appropriate response:
+**Think of it like:** Once your brain knows someone wants to track an order, your mouth speaks the answer.
+
+**How it works:**
 
 ```typescript
-export const generateResponse = async (intent, message, userId) => {
-  switch (intent) {
-    case ChatIntent.GREETING:
-      return {
-        text: "Hi there! 👋 I'm your Farm-to-Table assistant.",
-        quickReplies: ['Track my order', 'Browse products'],
-      };
+// Based on what intent was detected, generate a response
+switch (intent) {
+  case ChatIntent.GREETING:
+    return {
+      text: "Hi there! 👋 How can I help you?",
+      quickReplies: ['Track my order', 'Browse products'],
+    };
 
-    case ChatIntent.TRACK_ORDER:
-      const orderNumber = extractOrderNumber(message);
-      const order = await getOrderByNumber(orderNumber); // Calls order-service
-      const delivery = await getDeliveryInfo(orderNumber); // Calls delivery-service
-      
-      return {
-        text: `Order ${orderNumber} - Status: ${order.status}`,
-        quickReplies: ['Talk to farmer', 'Track another order'],
-      };
-
-    case ChatIntent.GET_VIOLATIONS:
-      // Returns mock violation data for inspectors
-      return {
-        text: "📋 **Recent Violations**\n\n...",
-        quickReplies: ['View open violations', 'Upcoming inspections'],
-      };
-
-    // ... more cases
-  }
-};
+  case ChatIntent.TRACK_ORDER:
+    // Get the order number from the message
+    const orderNumber = extractOrderNumber(message);
+    
+    // Call order-service to get real data!
+    const order = await getOrderByNumber(orderNumber);
+    
+    return {
+      text: `Order ${orderNumber} is ${order.status}`,
+      quickReplies: ['Talk to farmer', 'Track another order'],
+    };
+    
+  // ... more cases for each intent
+}
 ```
+
+**Quick Replies:** Notice those `quickReplies`? They appear as buttons in the chat UI so users can tap instead of typing!
+
+**Where to find it:** [handlers.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/services/chatbot-service/src/handlers.ts)
 
 ---
 
-## Service Calls
+## 📁 File 4: `services.ts` - The Hands
 
-📁 **File:** [services.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/services/chatbot-service/src/services.ts)
+**What it does:** Talks to other services to get real data.
 
-The chatbot talks to other services to get real data:
+**Think of it like:** When someone asks "where's my order?", the chatbot needs to actually look it up somewhere. The "hands" reach out to the order-service to grab that info.
+
+**How it works:**
 
 ```typescript
-// Service URLs
+// URLs of other services
 const ORDER_SERVICE_URL = 'http://order-service:3004';
 const DELIVERY_SERVICE_URL = 'http://delivery-service:3005';
-const PRODUCT_SERVICE_URL = 'http://product-service:3003';
 
 // Get order details
 export const getOrderByNumber = async (orderNumber: string) => {
   const response = await axios.get(
     `${ORDER_SERVICE_URL}/api/orders/number/${orderNumber}`
   );
-  return response.data.data;
+  return response.data.data;  // Returns the actual order!
 };
 
 // Get delivery info
@@ -261,302 +163,170 @@ export const getDeliveryInfo = async (orderNumber: string) => {
   const response = await axios.get(
     `${DELIVERY_SERVICE_URL}/api/deliveries/order/${orderNumber}`
   );
-  return response.data.data;
-};
-
-// Search products
-export const searchProducts = async (query: string) => {
-  const response = await axios.get(
-    `${PRODUCT_SERVICE_URL}/api/products`,
-    { params: { search: query, limit: 5 } }
-  );
-  return response.data.data;
+  return response.data.data;  // Returns delivery status!
 };
 ```
 
----
-
-## Role-Based UI
-
-📁 **File:** [ChatWidget.tsx](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/frontend/src/components/shared/ChatWidget.tsx)
-
-The chat UI changes based on who's logged in:
-
-```typescript
-const roleConfigs = {
-  restaurant: {
-    welcomeMessage: "I can help you track orders and find products.",
-    suggestions: ['Track my order', 'Talk to farmer'],
-    botName: 'Ordering Assistant',
-  },
-  farmer: {
-    welcomeMessage: "I can help you manage incoming orders.",
-    suggestions: ['Show pending orders', 'Talk to restaurant'],
-    botName: 'Sales Assistant',
-  },
-  distributor: {
-    welcomeMessage: "I can help with delivery routes and schedules.",
-    suggestions: ['Show my deliveries', 'View route details'],
-    botName: 'Delivery Assistant',
-  },
-  inspector: {
-    welcomeMessage: "I can help you view violations and inspections.",
-    suggestions: ['Show recent violations', 'Upcoming inspections'],
-    botName: 'Inspection Assistant',
-  },
-};
-```
+**Where to find it:** [services.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/services/chatbot-service/src/services.ts)
 
 ---
 
-## External vs Internal APIs
+## 🔄 The Complete Journey
 
-You have **TWO API Gateways**:
-
-### Architecture Diagram
+Let's trace what happens when you type "Track my order ORD-1234":
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                           INTERNET / USERS                              │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│              EXTERNAL API GATEWAY (Port 4000)                          │
-│     📁 /backend/gateways/external-api-gateway                          │
-│                                                                         │
-│  PURPOSE: Frontend ↔ Backend communication                              │
-│  SECURITY: JWT tokens required                                          │
-│  ROUTES: /api/auth, /api/users, /api/orders, /api/products...          │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                          MICROSERVICES                                  │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐     │
-│  │ Auth     │ │ User     │ │ Product  │ │ Order    │ │ Delivery │     │
-│  │ :3001    │ │ :3002    │ │ :3003    │ │ :3004    │ │ :3005    │     │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘     │
-│       │            │            │            │            │            │
-│       └────────────┴────────────┴─────┬──────┴────────────┘            │
-│                                       │                                 │
-│                                       ▼                                 │
-│         ┌────────────────────────────────────────────────────┐         │
-│         │       INTERNAL API GATEWAY (Port 4001)             │         │
-│         │  📁 /backend/gateways/internal-api-gateway         │         │
-│         │                                                     │         │
-│         │  PURPOSE: Service ↔ Service communication          │         │
-│         │  SECURITY: Service API keys (no user JWT)          │         │
-│         │  ROUTES: /internal/users, /internal/orders...      │         │
-│         └────────────────────────────────────────────────────┘         │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
-### External API Gateway (For Users)
-
-📁 **Location:** `/backend/gateways/external-api-gateway/`
-
-| Purpose | File |
-|---------|------|
-| Main server | `src/index.ts` |
-| Route definitions | `src/routes.ts` |
-| JWT verification | `src/middleware/auth.ts` |
-
-**How it works:**
-
-```typescript
-// Public routes (no JWT required)
-router.use('/api/auth', createProxyMiddleware({ target: AUTH_SERVICE }));
-
-// Protected routes (JWT required)
-router.use(
-  '/api/users',
-  authenticateToken,  // ← Verify JWT first!
-  requireAuth,        // ← Must be logged in
-  createProxyMiddleware({ target: USER_SERVICE })
-);
-```
-
-### Internal API Gateway (For Services)
-
-📁 **Location:** `/backend/gateways/internal-api-gateway/`
-
-| Purpose | File |
-|---------|------|
-| Main server | `src/index.ts` |
-| Route definitions | `src/routes.ts` |
-| Service key auth | `src/middleware/serviceAuth.ts` |
-
-**How it works:**
-
-```typescript
-// Internal routes (service API key required, not user JWT)
-router.use(
-  '/internal/users',
-  serviceAuth,  // ← Service API key, not JWT!
-  createProxyMiddleware({
-    target: USER_SERVICE,
-    pathRewrite: { '^/internal/users': '/api/users' },
-  })
-);
+YOU: "Track my order ORD-1234"
+     ↓
+📁 index.ts receives the message
+     ↓
+📁 intents.ts checks: "ORD-1234" matches TRACK_ORDER pattern!
+     Intent = TRACK_ORDER
+     ↓
+📁 handlers.ts sees TRACK_ORDER intent
+     - Extracts "ORD-1234" from message
+     - Calls services.ts to get order data
+     ↓
+📁 services.ts calls order-service API
+     - GET http://order-service:3004/api/orders/number/ORD-1234
+     - Returns: { status: 'shipped', total: 125.50, ... }
+     ↓
+📁 handlers.ts creates response:
+     "Order ORD-1234 is Shipped! 📦"
+     ↓
+📁 index.ts sends response back to you
+     ↓
+YOU SEE: "Order ORD-1234 is Shipped! 📦"
+         [Talk to farmer] [Track another order]
 ```
 
 ---
 
-## Service Communication Methods
+## 🎨 Different Looks for Different Users
 
-### 1️⃣ Direct HTTP Calls (Synchronous)
+The chatbot looks different depending on who's logged in!
 
-Used when one service **needs data immediately** from another.
-
-```typescript
-// Chatbot directly calls order-service
-const response = await axios.get('http://order-service:3004/api/orders/123');
+**If you're a RESTAURANT:**
+```
+Welcome message: "I can help you track orders and find products"
+Suggestions: [Track my order] [Talk to farmer]
 ```
 
+**If you're a FARMER:**
 ```
-Chatbot Service ──HTTP GET──> Order Service
-                <──Response───
-```
-
-### 2️⃣ Through Internal Gateway (More Secure)
-
-Used for centralized service-to-service authentication.
-
-```typescript
-const response = await axios.get(
-  'http://internal-gateway:4001/internal/orders',
-  { headers: { 'X-Service-Key': SERVICE_API_KEY } }
-);
+Welcome message: "I can help you manage incoming orders"
+Suggestions: [Show pending orders] [Talk to restaurant]
 ```
 
+**If you're an INSPECTOR:**
 ```
-Chatbot ──> Internal Gateway ──> Order Service
-        <──                  <──
-```
-
-### 3️⃣ RabbitMQ Messages (Asynchronous)
-
-Used when services need to **notify** others without waiting.
-
-```typescript
-// Order Service publishes event
-rabbitmq.publish('farm2table.events', 'order.created', {
-  orderId: order._id,
-  buyerId: order.buyerId,
-});
-
-// Notification Service listens
-rabbitmq.subscribe('order.created', async (message) => {
-  await sendNotification(message.buyerId, 'Order placed!');
-});
-
-// Delivery Service also listens
-rabbitmq.subscribe('order.created', async (message) => {
-  await createDeliveryTask(message.orderId);
-});
+Welcome message: "I can help you view violations and inspections"
+Suggestions: [Show recent violations] [Upcoming inspections]
 ```
 
-```
-Order Service ──publishes──> [RabbitMQ] ──delivers──> Notification Service
-                                       ──delivers──> Delivery Service
-                                       ──delivers──> Chatbot Service
-```
-
-### Communication Matrix
-
-| From | To | Method | When Used |
-|------|-----|--------|-----------|
-| **Frontend** | External Gateway | HTTP + JWT | All user actions |
-| **External Gateway** | Services | HTTP Proxy | Every request |
-| **Chatbot** | Order/Delivery | Direct HTTP | Getting data for responses |
-| **Service** | Service | Internal Gateway | Secure internal lookups |
-| **Any Service** | RabbitMQ | Publish | Events (order created, etc.) |
-| **RabbitMQ** | Any Service | Subscribe | Reacting to events |
+This is set up in the frontend file: [ChatWidget.tsx](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/frontend/src/components/shared/ChatWidget.tsx) (lines 52-95)
 
 ---
 
-## File Reference
+## 🌐 Two API Gateways - External vs Internal
 
-### Chatbot Service
+We have TWO "doors" into our backend:
 
-| Purpose | File |
-|---------|------|
-| Main entry point | [index.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/services/chatbot-service/src/index.ts) |
-| Intent detection | [intents.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/services/chatbot-service/src/intents.ts) |
-| Response handlers | [handlers.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/services/chatbot-service/src/handlers.ts) |
-| Service calls | [services.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/services/chatbot-service/src/services.ts) |
+### 🚪 External Gateway (Port 4000) - For USERS
 
-### Frontend
+This is what the frontend talks to. It requires a JWT token (login).
 
-| Purpose | File |
-|---------|------|
-| Chat UI component | [ChatWidget.tsx](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/frontend/src/components/shared/ChatWidget.tsx) |
-| Message context | [MessageContext.tsx](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/frontend/src/contexts/MessageContext.tsx) |
-
-### Gateways
-
-| Purpose | File |
-|---------|------|
-| External Gateway main | [index.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/gateways/external-api-gateway/src/index.ts) |
-| External Gateway routes | [routes.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/gateways/external-api-gateway/src/routes.ts) |
-| External Gateway auth | [auth.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/gateways/external-api-gateway/src/middleware/auth.ts) |
-| Internal Gateway main | [index.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/gateways/internal-api-gateway/src/index.ts) |
-| Internal Gateway routes | [routes.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/gateways/internal-api-gateway/src/routes.ts) |
-
-### Shared Utilities
-
-| Purpose | File |
-|---------|------|
-| RabbitMQ helper | [rabbitmq.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/api-gateway/shared/rabbitmq.ts) |
-| Consul helper | [consul.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/api-gateway/shared/consul.ts) |
-| Database helper | [database.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/api-gateway/shared/database.ts) |
-
----
-
-## RabbitMQ Event Subscriptions in Chatbot
-
-📁 **File:** [index.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/services/chatbot-service/src/index.ts) (lines 102-136)
-
-The chatbot subscribes to events for proactive notifications:
-
-```typescript
-const setupEventHandlers = async (rabbitMQ: RabbitMQClient) => {
-  // Listen for order events
-  await rabbitMQ.subscribe(
-    'chatbot.order_events',
-    'farm_to_table_events',
-    'order.*',
-    async (eventData) => {
-      console.log('📦 Received order event:', eventData);
-      // Could trigger proactive chat notifications
-    }
-  );
-
-  // Listen for delivery events
-  await rabbitMQ.subscribe(
-    'chatbot.delivery_events',
-    'farm_to_table_events',
-    'delivery.*',
-    async (eventData) => {
-      console.log('🚚 Received delivery event:', eventData);
-      // Could update delivery status in real-time
-    }
-  );
-
-  // Listen for user events
-  await rabbitMQ.subscribe(
-    'chatbot.user_events',
-    'farm_to_table_events',
-    'user.*',
-    async (eventData) => {
-      console.log('👤 Received user event:', eventData);
-      // Could personalize responses based on user activity
-    }
-  );
-};
+```
+Your Browser → External Gateway (4000) → Services
 ```
 
+**Example:**
+```
+GET http://localhost:4000/api/orders   ← Needs your JWT token!
+```
+
+**Where:** [external-api-gateway/src/routes.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/gateways/external-api-gateway/src/routes.ts)
+
 ---
 
-*Last updated: December 13, 2025*
+### 🔒 Internal Gateway (Port 4001) - For SERVICES
+
+This is for services to talk to each other. It uses a service API key, not JWT.
+
+```
+Chatbot Service → Internal Gateway (4001) → Order Service
+```
+
+**Example:**
+```
+GET http://internal-gateway:4001/internal/orders   ← Needs service key!
+```
+
+**Where:** [internal-api-gateway/src/routes.ts](file:///Users/wolves/Desktop/Fall2025_WEBDEV_PROJECT/backend/gateways/internal-api-gateway/src/routes.ts)
+
+---
+
+### But Wait... The Chatbot Calls Services Directly!
+
+In our current code, the chatbot actually calls services directly (no internal gateway):
+
+```typescript
+// In services.ts - direct call!
+const response = await axios.get('http://order-service:3004/api/orders/...');
+```
+
+This works because all services are on the same Docker network. The internal gateway is there if we wanted **extra security** between services.
+
+---
+
+## 📡 Three Ways Services Talk to Each Other
+
+### 1. Direct HTTP (What chatbot uses)
+```
+Chatbot → HTTP GET → Order Service → Response
+```
+**When to use:** You need data RIGHT NOW
+
+### 2. Internal Gateway
+```
+Chatbot → Internal Gateway → Order Service → Response
+```
+**When to use:** You want centralized authentication
+
+### 3. RabbitMQ Messages
+```
+Order Service → publishes "order.created" → RabbitMQ
+                                                ↓
+Notification Service ← subscribes ← "order.created"
+Delivery Service ← subscribes ← "order.created"
+```
+**When to use:** You want to notify multiple services, don't need a response
+
+---
+
+## 📂 Quick File Lookup
+
+| What You Need | File Location |
+|---------------|---------------|
+| Chatbot entry point | `backend/services/chatbot-service/src/index.ts` |
+| Intent detection | `backend/services/chatbot-service/src/intents.ts` |
+| Response generation | `backend/services/chatbot-service/src/handlers.ts` |
+| Service calls | `backend/services/chatbot-service/src/services.ts` |
+| Chat UI component | `frontend/src/components/shared/ChatWidget.tsx` |
+| External Gateway | `backend/gateways/external-api-gateway/src/routes.ts` |
+| Internal Gateway | `backend/gateways/internal-api-gateway/src/routes.ts` |
+
+---
+
+## 🎯 Key Takeaways
+
+1. **Intent Detection** = Pattern matching with regex and keywords
+2. **Handlers** = Switch statement that creates responses based on intent
+3. **Services** = HTTP calls to other microservices for real data
+4. **External Gateway** = For users (needs JWT token)
+5. **Internal Gateway** = For services (needs service API key)
+6. **Direct calls** = Services can also call each other directly on Docker network
+
+---
+
+*That's it! Now you understand how the chatbot works from start to finish. 🚀*
